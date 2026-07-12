@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSCILLARIUM — a frequency laboratory for ears, gear &amp; mind</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='none' stroke='%2300e5ff' stroke-width='6'/><circle cx='50' cy='50' r='18' fill='none' stroke='%23ff3ec8' stroke-width='6'/></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="boot">
+  <div id="boot-inner">
+    <div id="boot-logo">◉</div>
+    <h1>OSCILLARIUM</h1>
+    <p class="boot-tag">a frequency laboratory for ears, gear &amp; mind</p>
+    <button id="boot-btn">⏻&ensp;POWER ON</button>
+    <p class="boot-hint">headphones recommended · start at low volume</p>
+  </div>
+</div>
+
+<header id="top">
+  <div id="brand">
+    <h1>OSCILLARIUM</h1>
+    <p>a frequency laboratory for ears, gear &amp; mind</p>
+  </div>
+  <div id="master">
+    <button id="lang-switch" title="language / язык" aria-pressed="false">
+      <span class="ms-half">EN</span><span class="ms-half">RU</span>
+    </button>
+    <button id="mode-switch" title="LAB: the full cockpit · VIBE: one knob, whole scenes" aria-pressed="false">
+      <span class="ms-half">LAB</span><span class="ms-half">VIBE</span>
+    </button>
+    <div id="master-vol"></div>
+    <button id="stop-all" class="btn danger" title="Silence everything (Esc)">■ STOP ALL</button>
+  </div>
+</header>
+
+<section id="viz-strip">
+  <canvas id="viz"></canvas>
+  <nav id="viz-modes">
+    <button data-mode="scope" class="active">SCOPE</button>
+    <button data-mode="spectrum">SPECTRUM</button>
+    <button data-mode="lissajous">LISSAJOUS</button>
+    <button data-mode="mandala">MANDALA</button>
+  </nav>
+</section>
+
+<section id="vibe-deck"></section>
+
+<main id="modules"></main>
+
+<footer id="foot">
+  <p>⚠ protect your ears — keep levels low, take breaks. entrainment audio is experimental
+  play, not medical advice. if you are prone to seizures, treat pulsing sound &amp; visuals
+  with care.</p>
+  <p>pure web audio · no samples · no server · no tracking · everything is math</p>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+<script>
+// file:// fallback: module scripts are CORS-blocked from file://, leaving the
+// boot button dead with no explanation. js/app.js sets window.__engine before
+// any click can happen, so a missing engine here means the module never loaded.
+document.getElementById('boot-btn').addEventListener('click', function () {
+  if (window.__engine !== undefined) return;
+  var hint = document.querySelector('.boot-hint');
+  hint.textContent = '⚠ this page must be served over http — run: python3 -m http.server (module scripts don\'t load from file://)';
+  hint.style.color = '#ffb020';
+});
+</script>
+</body>
+</html>
