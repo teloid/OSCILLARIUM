@@ -161,9 +161,10 @@ export function createSustainer(ctx) {
 }
 
 // ---- drive ---------------------------------------------------------------------
-// pre-gain → WaveShaper (4x oversampled) → DC-block highpass → tone lowpass →
-// post-gain → mix. Post-gain roughly inverts the loudness the pre-gain+curve
-// added (measured on a nominal pick), so the amount knob adds dirt, not volume.
+// pre EQ (metal voicing, neutral otherwise) → pre-gain → WaveShaper (4x
+// oversampled) → DC-block highpass → tone lowpass → post-gain → mix. Post-gain
+// roughly inverts the loudness the pre-gain+curve added (measured on a nominal
+// pick), so the amount knob adds dirt, not volume.
 
 // Transfer curves; k grows with amount. All moderate on purpose — the brief is
 // distortion FOR SUSTAIN, parallel-mixable, never a rectifier wall.
@@ -188,6 +189,15 @@ const SHAPERS = {
     const k = 2 + 8 * a;
     return (x) => Math.tanh(k * (2 * x * x - 0.6));
   },
+  // The deliberate exception to "moderate": two cascaded tanh stages folded
+  // into one table — the first stage's ceiling feeds the second's knee, a hard,
+  // compressed, modern high-gain sound. Odd-symmetric, so f(0) = 0 and the RMS
+  // + full-scale probes below see it like any other table.
+  metal: (a) => {
+    const g1 = 3 + 14 * a;
+    const g2 = 1.8 + 6 * a;
+    return (x) => Math.tanh(g2 * Math.tanh(g1 * x));
+  },
 };
 
 export function createDrive(ctx) {
@@ -195,6 +205,20 @@ export function createDrive(ctx) {
   const p = { curve: 'warm', amount: 0.35, tone: 4500, mix: 1 };
   const mix = makeMix(ctx, input, output, p.mix);
 
+  // Metal shapes AROUND the shaper too: a tightness highpass kills flub before
+  // the gain stages see it, and the 740 Hz hump is the tube-screamer push.
+  // Both stay in-line for every curve — parked at neutral (10 Hz HP, 0 dB
+  // peak) they're audibly transparent, and ramping values beats rerouting:
+  // no clicks on curve switch.
+  const preHP = ctx.createBiquadFilter();
+  preHP.type = 'highpass';
+  preHP.frequency.value = 10;
+  preHP.Q.value = 0.707;
+  const preMid = ctx.createBiquadFilter();
+  preMid.type = 'peaking';
+  preMid.frequency.value = 740;
+  preMid.Q.value = 0.9;
+  preMid.gain.value = 0;
   const preG = gainOf(ctx, 1);
   const shaper = ctx.createWaveShaper();
   shaper.oversample = '4x';
@@ -205,7 +229,9 @@ export function createDrive(ctx) {
   toneLP.type = 'lowpass';
   toneLP.Q.value = 0.707;
   const postG = gainOf(ctx, 1);
-  input.connect(preG);
+  input.connect(preHP);
+  preHP.connect(preMid);
+  preMid.connect(preG);
   preG.connect(shaper);
   shaper.connect(dcHP);
   dcHP.connect(toneLP);
@@ -218,13 +244,22 @@ export function createDrive(ctx) {
     // Drive opens the tone a touch — more dirt needs more air to stay clear.
     const toneHz = Math.min(14000, p.tone * (1 + 0.5 * p.amount));
     const hpHz = p.curve === 'octave' ? 90 : 25;
+    // Metal's pre-voicing engages here; every other curve parks the same
+    // filters at neutral, so switching to/from metal only ramps params.
+    const metal = p.curve === 'metal';
+    const preHz = metal ? 90 : 10;
+    const midDb = metal ? 5.5 : 0;
     const t = ctx.currentTime;
     if (ramp) {
       toneLP.frequency.setTargetAtTime(toneHz, t, HOT);
       dcHP.frequency.setTargetAtTime(hpHz, t, HOT);
+      preHP.frequency.setTargetAtTime(preHz, t, HOT);
+      preMid.gain.setTargetAtTime(midDb, t, HOT);
     } else {
       toneLP.frequency.value = toneHz;
       dcHP.frequency.value = hpHz;
+      preHP.frequency.value = preHz;
+      preMid.gain.value = midDb;
     }
   }
 
@@ -307,7 +342,194 @@ export function createDrive(ctx) {
     },
     dispose() {
       clearTimeout(curveTimer);
-      unplug([input, preG, shaper, dcHP, toneLP, postG, mix.dry, mix.wet, output]);
+      unplug([input, preHP, preMid, preG, shaper, dcHP, toneLP, postG, mix.dry, mix.wet, output]);
+    },
+  };
+}
+
+// ---- cab -----------------------------------------------------------------------
+// Speaker cabinet emulation: tightness highpass → ConvolverNode with a
+// generated stereo IR. IRs are synthesized right here in JS (no
+// OfflineAudioContext): a seeded exponentially-decaying noise burst,
+// spectrally carved by cascaded RBJ biquads run as difference equations over
+// the samples. L/R get different noise seeds under identical filtering —
+// decorrelated tails re-widen the mono-folded feed. Full-wet by design (no
+// mix): a cab is a speaker, not a flavor; the rig's pedal bypass is the off
+// switch.
+
+// Deterministic PRNG (mulberry32): seeded noise keeps IRs reproducible —
+// and provably NaN-free — across loads.
+function mulberry32(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// One RBJ cookbook biquad (direct form I) run in place over a Float32Array.
+function applyBiquad(buf, sr, type, f, q, gainDb = 0) {
+  f = Math.min(Math.max(f, 1), sr * 0.45); // keep w0 off Nyquist — stability
+  const A = Math.pow(10, gainDb / 40);
+  const w0 = (2 * Math.PI * f) / sr;
+  const cw = Math.cos(w0);
+  const alpha = Math.sin(w0) / (2 * Math.max(q, 1e-3));
+  let b0, b1, b2, a0, a1, a2;
+  if (type === 'lowpass') {
+    b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = b0;
+    a0 = 1 + alpha; a1 = -2 * cw; a2 = 1 - alpha;
+  } else if (type === 'highpass') {
+    b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = b0;
+    a0 = 1 + alpha; a1 = -2 * cw; a2 = 1 - alpha;
+  } else { // peaking
+    b0 = 1 + alpha * A; b1 = -2 * cw; b2 = 1 - alpha * A;
+    a0 = 1 + alpha / A; a1 = -2 * cw; a2 = 1 - alpha / A;
+  }
+  b0 /= a0; b1 /= a0; b2 /= a0; a1 /= a0; a2 /= a0;
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const x0 = buf[i];
+    const y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    x2 = x1; x1 = x0;
+    y2 = y1; y1 = y0;
+    buf[i] = y0;
+  }
+}
+
+// Voicing cascades, applied in order: [type, Hz, Q, dB, stages]. `trim` rides
+// on top of unit-energy normalization (the reverb convention: white in →
+// ~unity RMS out) so each voicing lands roughly unity-loudness on program
+// material — measured by convolving against a distorted 110 Hz harmonic-series
+// probe. Bright cabs (glass) shed low-mid program energy and trim up; scooped
+// warm cabs concentrate it and trim down.
+const CAB_SPECS = {
+  modern412: { seconds: 0.045, trim: 0.9, cascade: [
+    ['highpass', 75, 0.707, 0, 2],
+    ['peaking', 105, 1.2, 4],       // thump
+    ['peaking', 550, 1.0, -4],      // scoop
+    ['peaking', 2700, 1.1, 5],      // attack
+    ['lowpass', 5200, 0.707, 0, 4], // steep fizz kill
+  ] },
+  vintage412: { seconds: 0.055, trim: 0.7, cascade: [
+    ['highpass', 65, 0.707, 0, 2],
+    ['peaking', 95, 1.1, 3],
+    ['peaking', 1400, 0.8, 2],      // warm mids
+    ['peaking', 2200, 1.0, 3],
+    ['lowpass', 4200, 0.707, 0, 4],
+  ] },
+  glass212: { seconds: 0.035, trim: 1.4, cascade: [
+    ['highpass', 80, 0.707, 0, 2],
+    ['peaking', 120, 1.0, 2],
+    ['peaking', 3400, 1.0, 4],      // sparkle
+    ['lowpass', 6500, 0.707, 0, 3],
+  ] },
+  // A practice amp in a closet.
+  lofi108: { seconds: 0.025, trim: 1.05, cascade: [
+    ['highpass', 180, 0.707, 0, 2],
+    ['peaking', 800, 1.4, 5],       // honk
+    ['lowpass', 2800, 0.707, 0, 4],
+  ] },
+};
+
+function makeCabIR(ctx, spec) {
+  const rate = ctx.sampleRate;
+  const len = Math.max(64, Math.round(spec.seconds * rate));
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    const rnd = mulberry32(0x5eed + ch * 0x9e3779b9);
+    for (let i = 0; i < len; i++) {
+      d[i] = (rnd() * 2 - 1) * Math.exp((-6.9 * i) / len); // −60 dB across the burst
+    }
+    for (const [type, f, q, dB, times = 1] of spec.cascade) {
+      for (let k = 0; k < times; k++) applyBiquad(d, rate, type, f, q, dB);
+    }
+    let energy = 0;
+    for (let i = 0; i < len; i++) energy += d[i] * d[i];
+    const g = spec.trim / Math.sqrt(Math.max(energy, 1e-12));
+    for (let i = 0; i < len; i++) d[i] *= g;
+  }
+  return buf;
+}
+
+const CAB_IR_CACHE = new Map(); // `${model}@${sampleRate}` → AudioBuffer
+
+function cabIRFor(ctx, model) {
+  const key = `${model}@${ctx.sampleRate}`;
+  if (!CAB_IR_CACHE.has(key)) CAB_IR_CACHE.set(key, makeCabIR(ctx, CAB_SPECS[model]));
+  return CAB_IR_CACHE.get(key);
+}
+
+export function createCab(ctx) {
+  const { input, output } = edges(ctx);
+  // Fold any stereo feed to mono at the door, like createDelay — a cab is a
+  // mono device; the decorrelated stereo IR re-widens naturally on the way out.
+  input.channelCount = 1;
+  input.channelCountMode = 'explicit';
+  input.channelInterpretation = 'speakers';
+  const p = { model: 'modern412', tight: 85 };
+
+  const hp = ctx.createBiquadFilter(); // tightness — flub kill before the cone
+  hp.type = 'highpass';
+  hp.frequency.value = p.tight;
+  hp.Q.value = 0.707;
+  input.connect(hp);
+
+  let cur = null;
+  const pending = new Map(); // timer id → { c, g } awaiting teardown
+  function mount(model, xfade) {
+    const c = ctx.createConvolver();
+    c.normalize = false; // IRs are energy-normalized in makeCabIR
+    c.buffer = cabIRFor(ctx, model);
+    const g = gainOf(ctx, xfade ? 0 : 1);
+    hp.connect(c);
+    c.connect(g);
+    g.connect(output);
+    if (xfade) {
+      const t = ctx.currentTime;
+      g.gain.setTargetAtTime(1, t, 0.02);
+      cur.g.gain.setTargetAtTime(0, t, 0.02);
+      const old = cur;
+      const id = setTimeout(() => {
+        pending.delete(id);
+        // disconnect() only drops OUTPUT edges — sever hp→old.c explicitly
+        // or the swapped-out convolver (and its IR) stays live forever.
+        try { hp.disconnect(old.c); } catch {}
+        unplug([old.c, old.g]);
+      }, 250);
+      pending.set(id, old);
+    }
+    cur = { c, g };
+  }
+  mount(p.model, false);
+
+  let dead = false;
+  return {
+    input,
+    output,
+    set(patch = {}) {
+      if ('tight' in patch) {
+        p.tight = num(patch.tight, 40, 250, p.tight);
+        hp.frequency.setTargetAtTime(p.tight, ctx.currentTime, HOT);
+      }
+      if ('model' in patch && patch.model !== p.model && Object.hasOwn(CAB_SPECS, patch.model)) {
+        p.model = patch.model;
+        mount(p.model, true);
+      }
+    },
+    dispose() {
+      if (dead) return;
+      dead = true;
+      for (const [id, old] of pending) {
+        clearTimeout(id);
+        try { hp.disconnect(old.c); } catch {}
+        unplug([old.c, old.g]);
+      }
+      pending.clear();
+      unplug([input, hp, cur.c, cur.g, output]);
     },
   };
 }
@@ -945,12 +1167,13 @@ export function createReverb(ctx) {
 // ---- registry --------------------------------------------------------------------
 
 // The rig's canonical chain order.
-export const FX_ORDER = ['gate', 'sustainer', 'drive', 'autowah', 'ringmod', 'pitch', 'mod', 'delay', 'reverb'];
+export const FX_ORDER = ['gate', 'sustainer', 'drive', 'cab', 'autowah', 'ringmod', 'pitch', 'mod', 'delay', 'reverb'];
 
 export const FACTORIES = {
   gate: createGate,
   sustainer: createSustainer,
   drive: createDrive,
+  cab: createCab,
   autowah: createAutoWah,
   ringmod: createRingMod,
   pitch: createPitchShift,

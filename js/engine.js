@@ -23,7 +23,18 @@ export const Engine = {
       if (this.ctx.state !== 'running') this.ctx.resume();
       return;
     }
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Latency & sample-rate prefs (set from the RIG panel, applied at creation —
+    // an AudioContext's rate and latency class are fixed for its lifetime).
+    let latencyHint = 'interactive';
+    let sampleRate;
+    try {
+      const lh = localStorage.getItem('osc-latency');
+      if (lh === 'balanced' || lh === 'playback') latencyHint = lh;
+      const sr = parseInt(localStorage.getItem('osc-samplerate') || '', 10);
+      if (sr >= 8000 && sr <= 96000) sampleRate = sr;
+    } catch (e) { /* private mode */ }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC(sampleRate ? { latencyHint, sampleRate } : { latencyHint });
     this.ctx = ctx;
 
     this.master = ctx.createGain();

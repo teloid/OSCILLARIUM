@@ -25,7 +25,21 @@ registerDict('ru', {
   'semis': 'полутона', 'type': 'тип', 'rate': 'скорость', 'depth': 'глубина',
   'time': 'время', 'feedback': 'фидбек', 'ping-pong': 'пинг-понг',
   'space': 'зал', 'shimmer': 'шиммер',
-  'warm': 'тёплый', 'tube': 'ламповый', 'fuzz': 'фузз', 'octave': 'октавный',
+  'warm': 'тёплый', 'tube': 'ламповый', 'fuzz': 'фузз', 'octave': 'октавный', 'metal': 'метал',
+  'cab': 'кабинет', 'model': 'модель', 'tight': 'тайт',
+  '4×12 modern': '4×12 модерн', '4×12 vintage': '4×12 винтаж', '2×12 glass': '2×12 стекло', '1×8 lofi': '1×8 лоуфай',
+  'tuner': 'тюнер', 'latency': 'задержка', 'sample rate': 'частота дискр.',
+  'lowest (live)': 'минимальная (живьём)', 'balanced': 'сбалансированная', 'safe (glitch-free)': 'надёжная (без щелчков)',
+  'auto': 'авто', 'changing latency or sample rate reloads the page.': 'смена задержки или частоты дискретизации перезагружает страницу.',
+  'modern metal': 'модерн-метал',
+  'djent': 'джент', 'doom wall': 'стена дума', 'silver lead': 'серебряное соло', 'frost': 'иней',
+  'crystal clean': 'кристальный клин', 'submarine': 'субмарина',
+  'palm-mute tight, scooped, surgical — chug in 7/8, we have the drum preset.': 'тайтовый палм-мьют, выскобленная середина, хирургия — чугайте в 7/8, драм-пресет уже есть.',
+  'fuzz into a vintage 4×12, one octave down — tectonic.': 'фузз в винтажный 4×12, октавой ниже — тектоника.',
+  'high-gain lead that sings instead of screams — delay and hall included.': 'хай-гейн соло, которое поёт, а не кричит — дилэй и зал в комплекте.',
+  'tremolo-picked frost through a cathedral — grim, majestic.': 'тремоло-иней сквозь собор — мрачно и величественно.',
+  'compressed sparkle through a glass cab — country-money clean.': 'компрессированное сияние через стеклянный кабинет — чистый звук за большие деньги.',
+  'slow wah and a 40 Hz ring under dark echoes — dive, dive, dive.': 'медленная вау и кольцо на 40 Гц под тёмным эхом — погружение, погружение.',
   'chorus': 'хорус', 'phaser': 'фейзер', 'tremolo': 'тремоло', 'vibrato': 'вибрато',
   'room': 'комната', 'hall': 'зал', 'cathedral': 'собор', 'haunted': 'призрачный', 'infinite': 'бесконечный',
   'sustain & clarity': 'сустейн и ясность', 'magical / epic': 'магия / эпос', 'creepy': 'жуть',
@@ -63,10 +77,25 @@ const PEDALS = [
   {
     id: 'drive', name: 'drive', accent: '#ff5470',
     controls: [
-      { key: 'curve', type: 'select', label: 'curve', options: ['warm', 'tube', 'fuzz', 'octave'], def: 'warm' },
+      { key: 'curve', type: 'select', label: 'curve', options: ['warm', 'tube', 'fuzz', 'octave', 'metal'], def: 'warm' },
       { key: 'amount', type: 'knob', label: 'amount', min: 0, max: 1, def: 0.35, fmt: (v) => Math.round(v * 100) + '%' },
       { key: 'tone', type: 'knob', label: 'tone', min: 500, max: 12000, def: 4500, log: true, fmt: (v) => (v / 1000).toFixed(1) + 'k' },
       { key: 'mix', type: 'knob', label: 'mix', min: 0, max: 1, def: 1, fmt: (v) => Math.round(v * 100) + '%' },
+    ],
+  },
+  {
+    id: 'cab', name: 'cab', accent: '#c98850',
+    controls: [
+      {
+        key: 'model', type: 'select', label: 'model', def: 'modern412',
+        options: [
+          { value: 'modern412', label: '4×12 modern' },
+          { value: 'vintage412', label: '4×12 vintage' },
+          { value: 'glass212', label: '2×12 glass' },
+          { value: 'lofi108', label: '1×8 lofi' },
+        ],
+      },
+      { key: 'tight', type: 'knob', label: 'tight', min: 40, max: 250, def: 85, log: true, fmt: (v) => Math.round(v) },
     ],
   },
   {
@@ -150,6 +179,59 @@ const PRESET_GROUPS = [
           reverb: { on: true, ir: 'room', mix: 0.18, shimmer: 0 },
         },
       },
+      {
+        name: 'crystal clean', hint: 'compressed sparkle through a glass cab — country-money clean.',
+        pedals: {
+          sustainer: { on: true, amount: 0.45 },
+          cab: { on: true, model: 'glass212', tight: 80 },
+          mod: { on: true, type: 'chorus', rate: 0.5, depth: 0.35, mix: 0.4 },
+          reverb: { on: true, ir: 'hall', mix: 0.22, shimmer: 0 },
+        },
+      },
+    ],
+  },
+  {
+    group: 'modern metal',
+    presets: [
+      {
+        name: 'djent', hint: 'palm-mute tight, scooped, surgical — chug in 7/8, we have the drum preset.',
+        pedals: {
+          gate: { on: true, threshold: 0.02, release: 0.06 },
+          drive: { on: true, curve: 'metal', amount: 0.8, tone: 6500, mix: 1 },
+          cab: { on: true, model: 'modern412', tight: 110 },
+          reverb: { on: true, ir: 'room', mix: 0.08, shimmer: 0 },
+        },
+      },
+      {
+        name: 'doom wall', hint: 'fuzz into a vintage 4×12, one octave down — tectonic.',
+        pedals: {
+          gate: { on: true, threshold: 0.012, release: 0.12 },
+          drive: { on: true, curve: 'fuzz', amount: 0.75, tone: 2800, mix: 1 },
+          cab: { on: true, model: 'vintage412', tight: 60 },
+          pitch: { on: true, semis: -12, mix: 0.25 },
+          reverb: { on: true, ir: 'room', mix: 0.15, shimmer: 0 },
+        },
+      },
+      {
+        name: 'silver lead', hint: 'high-gain lead that sings instead of screams — delay and hall included.',
+        pedals: {
+          sustainer: { on: true, amount: 0.4 },
+          drive: { on: true, curve: 'metal', amount: 0.6, tone: 4800, mix: 1 },
+          cab: { on: true, model: 'glass212', tight: 90 },
+          delay: { on: true, time: 0.45, feedback: 0.35, tone: 3000, pingpong: false, mix: 0.25 },
+          reverb: { on: true, ir: 'hall', mix: 0.3, shimmer: 0 },
+        },
+      },
+      {
+        name: 'frost', hint: 'tremolo-picked frost through a cathedral — grim, majestic.',
+        pedals: {
+          gate: { on: true, threshold: 0.01, release: 0.1 },
+          drive: { on: true, curve: 'metal', amount: 0.7, tone: 7000, mix: 1 },
+          cab: { on: true, model: 'vintage412', tight: 100 },
+          mod: { on: true, type: 'tremolo', rate: 6.5, depth: 0.55, mix: 0.8 },
+          reverb: { on: true, ir: 'cathedral', mix: 0.4, shimmer: 0 },
+        },
+      },
     ],
   },
   {
@@ -230,6 +312,15 @@ const PRESET_GROUPS = [
           reverb: { on: true, ir: 'infinite', mix: 0.65, shimmer: 0.45 },
         },
       },
+      {
+        name: 'submarine', hint: 'slow wah and a 40 Hz ring under dark echoes — dive, dive, dive.',
+        pedals: {
+          autowah: { on: true, sens: 0.35, q: 4, mix: 1 },
+          ringmod: { on: true, freq: 40, mix: 0.35 },
+          delay: { on: true, time: 0.8, feedback: 0.6, tone: 1200, pingpong: false, mix: 0.45 },
+          reverb: { on: true, ir: 'infinite', mix: 0.45, shimmer: 0 },
+        },
+      },
     ],
   },
 ];
@@ -255,7 +346,8 @@ export function initRig(root) {
 
   // audio graph (lazy)
   let built = false;
-  let inGain = null, meterAn = null, rigBus = null;
+  let inGain = null, meterAn = null, tunerAn = null, rigBus = null;
+  let tunerOn = false;
   let micStream = null, micNode = null;
   let armSeq = 0; // arm() re-entrancy guard — only the newest request wins the mic
   let plucker = null;
@@ -271,6 +363,9 @@ export function initRig(root) {
     meterAn = ctx.createAnalyser();
     meterAn.fftSize = 1024;
     inGain.connect(meterAn);
+    tunerAn = ctx.createAnalyser();
+    tunerAn.fftSize = 2048;
+    inGain.connect(tunerAn);
 
     let prev = inGain;
     for (const p of PEDALS) {
@@ -344,7 +439,10 @@ export function initRig(root) {
       out,
       pluck(freq) {
         const f = freq || PLUCK_NOTES[(noteIx = (noteIx + 1) % PLUCK_NOTES.length)];
-        delay.delayTime.setValueAtTime(1 / f, ctx.currentTime);
+        // Web Audio adds one implicit render quantum (128 samples) to feedback
+        // cycles — subtract it or the string tunes flat
+        const dt = Math.max(0.001, 1 / f - 128 / ctx.sampleRate);
+        delay.delayTime.setValueAtTime(dt, ctx.currentTime);
         const src = ctx.createBufferSource();
         src.buffer = burst;
         const g = ctx.createGain();
@@ -524,6 +622,142 @@ export function initRig(root) {
   const inputGroup = elem('div', 'rig-io');
   inputGroup.append(inTitle, srcSel.el, devSel.el, armBtn, gainKnob.el, meter, pluckBtn, autoT.el, levelKnob.el, outCtl.el);
   strip.append(inputGroup);
+
+  // ---- tuner + latency row -------------------------------------------------------
+  const NOTE_N = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const tunerRow = elem('div', 'rig-io rig-tuner-row');
+  const tunerNote = UI.readout('—', 'big');
+  const tunerCv = elem('canvas', 'tuner-scale');
+  tunerCv.width = 260; tunerCv.height = 54;
+  const tunerT = UI.toggle({
+    label: t('tuner'),
+    onChange: (on) => {
+      tunerOn = on;
+      buildChain();
+      if (S.source === 'pluck') routeSource();
+      tunerNote.set('—');
+      paintTuner(-1);
+    },
+  });
+
+  let storedLat = 'interactive', storedSr = '';
+  try {
+    storedLat = localStorage.getItem('osc-latency') || 'interactive';
+    storedSr = localStorage.getItem('osc-samplerate') || '';
+  } catch (e) { /* private mode */ }
+  const latSel = UI.select({
+    label: t('latency'),
+    options: [
+      { value: 'interactive', label: t('lowest (live)') },
+      { value: 'balanced', label: t('balanced') },
+      { value: 'playback', label: t('safe (glitch-free)') },
+    ],
+    value: storedLat,
+    onChange: (v) => { try { localStorage.setItem('osc-latency', v); } catch (e) {} location.reload(); },
+  });
+  const srSel = UI.select({
+    label: t('sample rate'),
+    options: [
+      { value: '', label: t('auto') },
+      { value: '44100', label: '44.1 kHz' },
+      { value: '48000', label: '48 kHz' },
+      { value: '96000', label: '96 kHz' },
+    ],
+    value: storedSr,
+    onChange: (v) => { try { localStorage.setItem('osc-samplerate', v); } catch (e) {} location.reload(); },
+  });
+  const latInfo = UI.readout('—');
+  tunerRow.append(tunerT.el, tunerNote.el, tunerCv, latSel.el, srSel.el, latInfo.el);
+  strip.append(tunerRow);
+  strip.append(elem('div', 'rig-hint', t('changing latency or sample rate reloads the page.')));
+
+  const tBuf = new Float32Array(2048);
+  // normalized autocorrelation with parabolic refinement (55–1000 Hz window)
+  function detectPitch() {
+    if (!tunerAn || !Engine.ready) return -1;
+    tunerAn.getFloatTimeDomainData(tBuf);
+    const sr = Engine.ctx.sampleRate;
+    const SIZE = tBuf.length;
+    let rms = 0;
+    for (let i = 0; i < SIZE; i++) rms += tBuf[i] * tBuf[i];
+    rms = Math.sqrt(rms / SIZE);
+    if (rms < 0.004) return -1;
+    const maxLag = Math.min(Math.floor(sr / 55), SIZE >> 1);
+    const minLag = Math.max(2, Math.floor(sr / 1000));
+    const c = new Float32Array(maxLag + 2);
+    for (let lag = 0; lag <= maxLag + 1; lag++) {
+      let sum = 0;
+      for (let i = 0; i < SIZE - lag; i++) sum += tBuf[i] * tBuf[i + lag];
+      c[lag] = sum / (SIZE - lag); // unbiased — the raw sum tapers with lag and reads sharp
+    }
+    let lag0 = minLag;
+    while (lag0 < maxLag && c[lag0] > c[lag0 + 1]) lag0++; // walk off the zero-lag peak
+    let bestLag = -1, best = -Infinity;
+    for (let lag = lag0; lag <= maxLag; lag++) {
+      if (c[lag] > best) { best = c[lag]; bestLag = lag; }
+    }
+    if (bestLag <= 0 || best < 0.3 * c[0]) return -1; // weak periodicity — noise, not a note
+    // The global max often sits on a period MULTIPLE (octave-down error) —
+    // take the smallest local peak within 10% of it instead.
+    let pick = bestLag;
+    for (let lag = lag0 + 1; lag < bestLag; lag++) {
+      if (c[lag] >= c[lag - 1] && c[lag] >= c[lag + 1] && c[lag] >= 0.9 * best) { pick = lag; break; }
+    }
+    const y1 = c[pick - 1], y2 = c[pick], y3 = c[pick + 1];
+    const denom = 2 * (2 * y2 - y1 - y3);
+    const shift = denom ? (y3 - y1) / denom : 0;
+    return sr / (pick + shift);
+  }
+
+  function paintTuner(freq) {
+    const cg = tunerCv.getContext('2d');
+    const W = tunerCv.width, H = tunerCv.height;
+    cg.clearRect(0, 0, W, H);
+    cg.fillStyle = 'rgba(0,0,0,0.35)';
+    cg.fillRect(0, 0, W, H);
+    // cents scale: ticks every 10¢, center line, ±5¢ green zone
+    const cx = W / 2, span = W / 2 - 14;
+    cg.fillStyle = 'rgba(72, 219, 195, 0.12)';
+    cg.fillRect(cx - span * 0.1, 4, span * 0.2, H - 8);
+    cg.strokeStyle = 'rgba(141, 138, 168, 0.5)';
+    cg.lineWidth = 1;
+    for (let cents = -50; cents <= 50; cents += 10) {
+      const x = cx + (cents / 50) * span;
+      cg.beginPath();
+      cg.moveTo(x, cents === 0 ? 6 : H / 2 - 6);
+      cg.lineTo(x, H - 6);
+      cg.stroke();
+    }
+    if (freq > 0) {
+      const midi = 69 + 12 * Math.log2(freq / 440);
+      const n = Math.round(midi);
+      const cents = (midi - n) * 100;
+      const name = NOTE_N[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
+      tunerNote.set(`${name} · ${freq.toFixed(1)} ${t('Hz')} · ${cents >= 0 ? '+' : ''}${cents.toFixed(0)}¢`);
+      const x = cx + (Math.max(-50, Math.min(50, cents)) / 50) * span;
+      const inTune = Math.abs(cents) < 5;
+      cg.strokeStyle = inTune ? '#48dbc3' : Math.abs(cents) < 15 ? '#ffb300' : '#ff5470';
+      cg.lineWidth = 3;
+      cg.beginPath();
+      cg.moveTo(x, 4);
+      cg.lineTo(x, H - 4);
+      cg.stroke();
+    } else {
+      tunerNote.set('—');
+    }
+  }
+
+  setInterval(() => {
+    if (tunerOn && document.body.classList.contains('rig')) paintTuner(detectPitch());
+  }, 120);
+
+  setInterval(() => {
+    if (Engine.ready) {
+      const c = Engine.ctx;
+      const ms = ((c.baseLatency || 0) + (c.outputLatency || 0)) * 1000;
+      latInfo.set(`${(c.sampleRate / 1000).toFixed(1)} kHz · ${ms.toFixed(1)} ms`);
+    }
+  }, 1000);
   const warn = elem('div', 'rig-warn', '⚠ ' + t('monitoring through speakers with a live microphone will feedback — use headphones.'));
   const hint = elem('div', 'rig-hint', t('the chain runs left to right — stomp a pedal to bring it in.'));
   wrap.append(strip, warn, hint);
@@ -560,7 +794,9 @@ export function initRig(root) {
       } else if (c.type === 'select') {
         const s = UI.select({
           label: t(c.label),
-          options: c.options.map((o) => ({ value: o, label: t(o) })),
+          options: c.options.map((o) => (typeof o === 'string'
+            ? { value: o, label: t(o) }
+            : { value: o.value, label: t(o.label) })),
           value: c.def,
           onChange: (v) => { PST[p.id].params[c.key] = v; applyPedal(p.id); },
         });

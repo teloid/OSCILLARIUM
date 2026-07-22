@@ -11,6 +11,11 @@ registerDict('ru', {
   'JUST GARDEN': 'ЧИСТЫЙ САД', 'THIRD EYE': 'ТРЕТИЙ ГЛАЗ', 'MACHINE RITUAL': 'РИТУАЛ МАШИН',
   'GOLDEN DRIFT': 'ЗОЛОТОЙ ДРЕЙФ', 'CAMPFIRE JAM': 'У КОСТРА', 'DUB CHAPEL': 'ДАБ-ЧАСОВНЯ',
   'AUTOBAHN': 'АВТОБАН', 'NIGHT DRIVE': 'НОЧНОЙ РЕЙС', 'DESERT BLUES': 'БЛЮЗ ПУСТЫНИ', 'STEPPER': 'СТЕППЕР',
+  'WITCHING HOUR': 'ЧАС ВЕДЬМ', 'ACID MASS': 'КИСЛОТНАЯ МЕССА', 'AURORA': 'АВРОРА', 'IRON HORIZON': 'ЖЕЛЕЗНЫЙ ГОРИЗОНТ',
+  'a semitone that refuses to resolve, under a delta tide — 3 a.m. as audio.': 'полутон, который отказывается разрешаться, под дельта-приливом — три часа ночи в виде звука.',
+  'the filter squelches like 1997 never ended — techno liturgy.': 'фильтр квакает так, будто 1997-й не кончался — техно-литургия.',
+  'φ-locked sparkle over glass — the sky is doing something.': 'сияние на золотом сечении поверх стекла — в небе что-то происходит.',
+  'slow doom floor for heavy riffs — bring the low tuning.': 'медленный думовый пол для тяжёлых риффов — берите низкий строй.',
   'nothing but the room tone you brought with you.': 'ничего, кроме тишины комнаты, которую вы принесли с собой.',
   'delta undertow, brown surf, a sub you feel more than hear.': 'дельта-отлив, бурый прибой и саб, который скорее чувствуешь, чем слышишь.',
   'tanpura and theta — the oldest drone on earth, rewired.': 'танпура и тета — древнейший дрон на земле, перепаянный заново.',
@@ -161,6 +166,40 @@ const SCENES = [
     modules: {
       drums: { gains: { level: 0.42 }, baseBpm: 168, p: { genre: 'jungle' } },
       drone: { gains: { level: 0.36 }, p: { note: 'D', octave: 1, wave: 'sine', voices: 1, spread: 0, sub: 0.85, fifth: 0, cutoff: 500, q: 0.5, driftRate: 0.05, driftDepth: 0.2, attack: 1.5, release: 2, progression: true, progPreset: 'i – bVII (dorian)', progBars: 2, progFollow: false } },
+    },
+  },
+  {
+    id: 'witching', name: 'WITCHING HOUR', viz: 'mandala', key: 9,
+    blurb: 'a semitone that refuses to resolve, under a delta tide — 3 a.m. as audio.',
+    modules: {
+      binaural: { gains: { level: 0.34 }, p: { mode: 'binaural', carrier: 90, beat: 3.3, wave: 'sine', noise: 'off' } },
+      tonelab: { gains: { levelL: 0.16, levelR: 0.16 }, p: { freqL: 138.59, waveL: 'sine', waveR: 'sine', muteL: false, muteR: false, lock: true, ratio: { n: 16, d: 15 }, glide: 0.4 } },
+      drone: { gains: { level: 0.34 }, p: { note: 'A', octave: 1, wave: 'sawtooth', voices: 5, spread: 40, sub: 0.5, fifth: 0, cutoff: 500, q: 10, driftRate: 0.04, driftDepth: 0.5, attack: 5, release: 5 } },
+    },
+  },
+  {
+    id: 'acidmass', name: 'ACID MASS', viz: 'spectrum', key: 2,
+    blurb: 'the filter squelches like 1997 never ended — techno liturgy.',
+    modules: {
+      drums: { gains: { level: 0.42 }, baseBpm: 138, p: { genre: 'techno', bpm: 138 } },
+      drone: { gains: { level: 0.36 }, p: { note: 'D', octave: 2, wave: 'sawtooth', voices: 2, spread: 8, sub: 0.5, fifth: 0, cutoff: 900, q: 14, driftRate: 0.9, driftDepth: 0.8, attack: 0.5, release: 1, progression: true, progPreset: 'i – bVII (dorian)', progBars: 1, progFollow: false } },
+    },
+  },
+  {
+    id: 'aurora', name: 'AURORA', viz: 'lissajous', key: 4, breath: 4.5,
+    blurb: 'φ-locked sparkle over glass — the sky is doing something.',
+    modules: {
+      binaural: { gains: { level: 0.3 }, p: { mode: 'binaural', carrier: 160, beat: 4.5, wave: 'sine', noise: 'off' } },
+      tonelab: { gains: { levelL: 0.18, levelR: 0.18 }, p: { freqL: 329.63, waveL: 'sine', waveR: 'triangle', muteL: false, muteR: false, lock: true, ratio: 'phi', glide: 0.6 } },
+      drone: { gains: { level: 0.28 }, p: { note: 'E', octave: 3, wave: 'triangle', voices: 2, spread: 6, sub: 0.15, fifth: 0.2, cutoff: 9000, q: 0.5, driftRate: 0.12, driftDepth: 0.2, attack: 1.5, release: 2 } },
+    },
+  },
+  {
+    id: 'ironhorizon', name: 'IRON HORIZON', viz: 'scope', key: 9,
+    blurb: 'slow doom floor for heavy riffs — bring the low tuning.',
+    modules: {
+      drums: { gains: { level: 0.42 }, baseBpm: 74, p: { genre: 'half-time', bpm: 74 } },
+      drone: { gains: { level: 0.36 }, p: { note: 'A', octave: 1, wave: 'sawtooth', voices: 6, spread: 45, sub: 0.7, fifth: 0, cutoff: 700, q: 6, driftRate: 0.05, driftDepth: 0.35, attack: 2, release: 2, progression: true, progPreset: 'i – iv – v (minor)', progBars: 4, progFollow: false } },
     },
   },
 ];

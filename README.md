@@ -52,7 +52,7 @@ noise suppression and auto-gain are explicitly disabled — this is an
 instrument input, not a Zoom call). Nine effects in a fixed chain, every one
 synthesized from Web Audio primitives:
 
-**gate → sustain → drive → auto-wah → ring mod → pitch → mod → delay → reverb**
+**gate → sustain → drive → cab → auto-wah → ring mod → pitch → mod → delay → reverb**
 
 ![The RIG](docs/rig.png)
 
@@ -64,11 +64,17 @@ Eno cathedral sound), and five generated impulse responses including
 **haunted** — a reversed IR that makes every note swell backwards out of
 nothing.
 
-Eleven presets in three families: *sustain & clarity* (clean lift, violin
-sustain, velvet fuzz), *magical / epic* (shimmer cathedral, golden halo,
-starfield, excalibur), and *creepy* (séance, poltergeist, mariana trench,
-graveyard wind). A built-in Karplus-Strong **test pluck** plays the chain
-when nothing is plugged in.
+Seventeen presets in four families: *sustain & clarity* (clean lift, violin
+sustain, velvet fuzz, crystal clean), ***modern metal*** (djent, doom wall,
+silver lead, frost — a five-curve drive with a `metal` cascade and four
+synthesized **cabinet IRs**: 4×12 modern/vintage, 2×12 glass, 1×8 lofi),
+*magical / epic* (shimmer cathedral, golden halo, starfield, excalibur), and
+*creepy* (séance, poltergeist, mariana trench, graveyard wind, submarine).
+
+Also on the input strip: a real **tuner** (autocorrelation pitch detection,
+±5¢ accuracy, cents needle) and **latency / sample-rate controls** (applied at
+AudioContext creation, measured output latency displayed live). A built-in
+Karplus-Strong **test pluck** plays the chain when nothing is plugged in.
 
 Not an amp sim — your modeler keeps its job. This is the weird pedal shelf
 it never had.

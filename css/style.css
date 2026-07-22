@@ -385,6 +385,13 @@ body.rig #modules { display: none; }
   border: 1px solid var(--line); border-radius: 6px; background: var(--bg2);
   width: 280px; height: 24px; flex: none;
 }
+.rig-tuner-row {
+  margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px;
+}
+.tuner-scale {
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg2);
+  width: 260px; height: 54px; flex: none;
+}
 .rig-warn, .rig-hint {
   font-family: var(--mono); font-size: 11px; margin: 10px 2px 0;
 }
