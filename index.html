@@ -28,8 +28,8 @@
     <button id="lang-switch" title="language / язык" aria-pressed="false">
       <span class="ms-half">EN</span><span class="ms-half">RU</span>
     </button>
-    <button id="mode-switch" title="LAB: the full cockpit · VIBE: one knob, whole scenes" aria-pressed="false">
-      <span class="ms-half">LAB</span><span class="ms-half">VIBE</span>
+    <button id="mode-switch" title="LAB: the full cockpit · RIG: your guitar through the machine · VIBE: one knob, whole scenes" data-mode="lab">
+      <span class="ms-half" data-m="lab">LAB</span><span class="ms-half" data-m="rig">RIG</span><span class="ms-half" data-m="vibe">VIBE</span>
     </button>
     <div id="master-vol"></div>
     <button id="stop-all" class="btn danger" title="Silence everything (Esc)">■ STOP ALL</button>
@@ -45,6 +45,8 @@
     <button data-mode="mandala">MANDALA</button>
   </nav>
 </section>
+
+<section id="rig-deck"></section>
 
 <section id="vibe-deck"></section>
 

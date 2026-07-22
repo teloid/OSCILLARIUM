@@ -4,6 +4,7 @@ import * as UI from './ui.js';
 import { t, lang, setLang, registerDict } from './i18n.js';
 import { initViz } from './viz.js';
 import { initVibe } from './vibe.js';
+import { initRig } from './rig.js';
 
 registerDict('ru', { 'master': 'мастер' });
 import binaural from './modules/binaural.js';
@@ -102,15 +103,21 @@ modeBtns.forEach((b) => b.addEventListener('click', () => selectVizMode(b.datase
 // ---- vibe deck ------------------------------------------------------------------
 
 initVibe(document.getElementById('vibe-deck'), MODULES.map((m) => m.mod), selectVizMode);
+initRig(document.getElementById('rig-deck'));
 
 const modeBtn = document.getElementById('mode-switch');
-function setUiMode(vibeOn) {
-  document.body.classList.toggle('vibe', vibeOn);
-  modeBtn.setAttribute('aria-pressed', String(vibeOn));
-  try { localStorage.setItem('osc-mode', vibeOn ? 'vibe' : 'lab'); } catch (e) { /* private mode */ }
+function setUiMode(mode) {
+  if (mode !== 'lab' && mode !== 'rig' && mode !== 'vibe') mode = 'lab';
+  document.body.classList.toggle('vibe', mode === 'vibe');
+  document.body.classList.toggle('rig', mode === 'rig');
+  modeBtn.setAttribute('data-mode', mode);
+  try { localStorage.setItem('osc-mode', mode); } catch (e) { /* private mode */ }
 }
-modeBtn.addEventListener('click', () => setUiMode(!document.body.classList.contains('vibe')));
-try { setUiMode(localStorage.getItem('osc-mode') === 'vibe'); } catch (e) { /* default: lab */ }
+modeBtn.addEventListener('click', (e) => {
+  const half = e.target.closest('.ms-half');
+  if (half && half.dataset.m) setUiMode(half.dataset.m);
+});
+try { setUiMode(localStorage.getItem('osc-mode') || 'lab'); } catch (e) { setUiMode('lab'); }
 
 // ---- boot ---------------------------------------------------------------------
 

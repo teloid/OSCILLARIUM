@@ -44,6 +44,35 @@ mirrored in the cockpit when you flip back.
 
 ![Drum machine](docs/drums.png)
 
+## The RIG
+
+Flip to **RIG** and plug in — a guitar through an audio interface (iRig-style),
+a synth, a microphone, anything `getUserMedia` can see (echo cancellation,
+noise suppression and auto-gain are explicitly disabled — this is an
+instrument input, not a Zoom call). Nine effects in a fixed chain, every one
+synthesized from Web Audio primitives:
+
+**gate → sustain → drive → auto-wah → ring mod → pitch → mod → delay → reverb**
+
+![The RIG](docs/rig.png)
+
+The drive exists for **sustain and clarity** — four curves (warm / tube /
+fuzz / octave) with a parallel mix so your note never disappears under the
+dirt. The magic lives further right: a granular pitch shifter, a
+**shimmer reverb** (pitch-shifted regeneration inside the convolver — the
+Eno cathedral sound), and five generated impulse responses including
+**haunted** — a reversed IR that makes every note swell backwards out of
+nothing.
+
+Eleven presets in three families: *sustain & clarity* (clean lift, violin
+sustain, velvet fuzz), *magical / epic* (shimmer cathedral, golden halo,
+starfield, excalibur), and *creepy* (séance, poltergeist, mariana trench,
+graveyard wind). A built-in Karplus-Strong **test pluck** plays the chain
+when nothing is plugged in.
+
+Not an amp sim — your modeler keeps its job. This is the weird pedal shelf
+it never had.
+
 ## Run it
 
 Any static file server works (module scripts won't load from `file://`):
