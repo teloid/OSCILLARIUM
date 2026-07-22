@@ -2,11 +2,13 @@
 // a fixed playhead; the lesson synth (or you) plays it; the RIG's pre-chain
 // analyser feeds pitch detection so dry guitar is scored no matter what the
 // pedalboard is doing. Modes: LISTEN (synth 100%), PRACTICE (guide 30%, loops,
-// live coloring), SCORE (count-in, synth muted, one pass, letter grade).
+// count-in on the first pass, live coloring), SCORE (count-in, synth muted,
+// one pass, letter grade). A virtual fretboard mirrors the roll underneath.
 import { Engine, Clock, midiToFreq, NOTE_NAMES, clamp } from './engine.js';
 import * as UI from './ui.js';
 import { t, registerDict } from './i18n.js';
 import { createPitchDetector, midiFromFreq } from './pitch.js';
+import { createFretboard } from './fretboard.js';
 
 registerDict('ru', {
   'lessons': 'уроки',
@@ -21,6 +23,7 @@ registerDict('ru', {
   'could not read that midi file': 'не удалось прочитать этот midi-файл',
   'first 400 notes': 'первые 400 нот',
   'bar': 'такт', 'bars': 'тактов', 'count-in': 'отсчёт',
+  'fretboard': 'гриф', 'note': 'нота', 'off': 'выкл',
   'notes': 'ноты', 'coverage': 'покрытие', 'best combo': 'лучшее комбо', 'perfect': 'идеальных',
   'combo': 'комбо',
   'pick a lesson, press play — the notes roll toward the line.':
@@ -217,6 +220,7 @@ export function initDojo(root, rig) {
     transpose: 0,     // semitones, applied to synth AND expectations
     loop: true,       // LISTEN/PRACTICE only
     metronome: true,
+    fretView: 'bar',  // 'bar' | 'note' | 'off' (internal keys, never translated)
   };
 
   // ---- lesson-derived (recomputed on lesson/transpose change) ----------------
@@ -242,6 +246,9 @@ export function initDojo(root, rig) {
       const m = n.m + S.transpose;
       return NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
     });
+    // fretboard positions follow the transposed sequence (lesson change,
+    // transpose change and MIDI import all land here)
+    fb.setSequence(L.notes.map((n) => n.m + S.transpose));
   }
 
   function effBpm() { return S.lesson.bpm * S.tempoPct / 100; }
@@ -472,7 +479,9 @@ export function initDojo(root, rig) {
     spb = 60 / effBpm();
     voiceBus.gain.value = S.mode === 'listen' ? 1 : S.mode === 'practice' ? 0.3 : 0;
     phTime = Engine.now() + 0.12;
-    phAnchor = S.mode === 'score' ? -S.lesson.beatsPerBar : 0; // 1-bar count-in
+    // 1-bar count-in for PRACTICE and SCORE (count-in beats are negative, so a
+    // looping PRACTICE run only ever counts in on its first iteration)
+    phAnchor = S.mode === 'listen' ? 0 : -S.lesson.beatsPerBar;
     schedBase = 0; noteIx = 0; metCursor = phAnchor;
     detPtr = 0; curIter = 0;
     resetStates();
@@ -529,10 +538,12 @@ export function initDojo(root, rig) {
   const chipsRow = lessonChips.el.querySelector('.chips');
   wrap.append(lessonChips.el);
 
-  // roll canvas + live combo
+  // roll canvas + fretboard + live combo
   const canvas = elem('canvas', 'lesson-canvas');
+  const fretCanvas = elem('canvas', 'fret-canvas');
   const comboEl = elem('div', 'dojo-combo');
-  wrap.append(canvas, comboEl);
+  wrap.append(canvas, fretCanvas, comboEl);
+  const fb = createFretboard(fretCanvas);
 
   // transport row
   const MODE_LABELS = { listen: 'LISTEN', practice: 'PRACTICE', score: 'SCORE' };
@@ -556,7 +567,17 @@ export function initDojo(root, rig) {
   });
   const loopT = UI.toggle({ label: t('loop'), value: S.loop, onChange: (v) => { S.loop = v; } });
   const metT = UI.toggle({ label: t('metronome'), value: S.metronome, onChange: (v) => { S.metronome = v; } });
-  row1.append(playBtn, tempoKnob.el, transKnob.el, loopT.el, metT.el);
+  const fretSel = UI.select({
+    label: t('fretboard'),
+    options: [
+      { value: 'bar', label: t('bar') },
+      { value: 'note', label: t('note') },
+      { value: 'off', label: t('off') },
+    ],
+    value: S.fretView,
+    onChange: (v) => setFretView(v),
+  });
+  row1.append(playBtn, tempoKnob.el, transKnob.el, loopT.el, metT.el, fretSel.el);
   wrap.append(row1);
 
   // status + midi import
@@ -612,6 +633,11 @@ export function initDojo(root, rig) {
     for (const k in modeBtnEls) modeBtnEls[k].classList.toggle('active', k === m);
     updateInputHint();
     updateComboEl();
+  }
+
+  function setFretView(v) {
+    S.fretView = v;
+    fretCanvas.style.display = v === 'off' ? 'none' : ''; // 'off' skips draw too
   }
 
   function setLesson(l) {
@@ -693,7 +719,9 @@ export function initDojo(root, rig) {
   const g = canvas.getContext('2d');
   const IDLE_HINT = t('pick a lesson, press play — the notes roll toward the line.');
   const COUNT_TXT = t('count-in');
+  const MONO_STACK = 'ui-monospace, SFMono-Regular, Menlo, monospace';
   let W = 0, H = 0, dpr = 1;
+  let countPx = 48, countFont = '', goFont = ''; // cached — no strings built in rAF
 
   const resize = () => {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -702,6 +730,9 @@ export function initDojo(root, rig) {
     H = Math.max(1, Math.round(r.height));
     const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
     if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
+    countPx = Math.max(48, Math.round(H * 0.5));
+    countFont = '700 ' + countPx + 'px ' + MONO_STACK;
+    goFont = '700 ' + Math.max(13, Math.round(H * 0.09)) + 'px ' + MONO_STACK;
   };
   new ResizeObserver(resize).observe(canvas);
   resize();
@@ -744,6 +775,61 @@ export function initDojo(root, rig) {
         g.fillText(noteLabels[i], x0 + 4, yC + 3.5);
       }
     }
+  }
+
+  // HUGE count-in digits on the roll, one per click. Derived from the SAME
+  // audio-clock beat math the clicks are scheduled with (beatAt/timeOfBeat),
+  // so each number lands exactly on its blip — no wall-clock guessing.
+  const COUNT_STRS = ['0'];
+  const countStr = (n) => COUNT_STRS[n] || (COUNT_STRS[n] = String(n));
+
+  function drawCountdown(curBeat) {
+    const beat = Math.floor(curBeat);
+    const num = -beat;                        // beatsPerBar … 1
+    if (num > S.lesson.beatsPerBar) return;   // pre-roll before the first click
+    const frac = curBeat - beat;              // 0..1 progress toward the next click
+    const pop = Math.max(0, 1 - frac / 0.3);
+    g.save();
+    g.translate(W / 2, H / 2);
+    const sc = 1 + 0.4 * pop * pop;           // ~1.4× on the click, eased down
+    g.scale(sc, sc);
+    g.globalAlpha = 1 - 0.7 * frac;           // fades until the next beat
+    g.fillStyle = C_PARTIAL;                  // amber
+    g.shadowColor = C_PARTIAL;
+    g.shadowBlur = 30;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = countFont;
+    g.fillText(countStr(num), 0, 0);
+    if (num === 1) {
+      g.font = goFont;
+      g.fillText('GO', 0, countPx * 0.62);
+    }
+    g.restore();
+  }
+
+  // ---- fretboard frame state (pooled — nothing allocated per frame) ------------
+  const fbPool = [];
+  const fbView = [];
+  const fbState = { notes: fbView, countdownGlow: 0 };
+  let fbCount = 0;
+
+  function fbPush(idx, midi, phase) {
+    let o = fbPool[fbCount];
+    if (!o) o = fbPool[fbCount] = { idx: 0, midi: 0, phase: 'past' };
+    o.idx = idx; o.midi = midi; o.phase = phase;
+    fbView[fbCount++] = o;
+  }
+
+  // verdict override: hit/partial/miss stick once the detector has judged
+  function fbPhase(i, verdicts, fallback) {
+    if (verdicts) {
+      const v = stVerdict[i];
+      if (v === 1) return 'hit';
+      if (v === 2) return 'partial';
+      if (v === 3) return 'miss';
+    }
+    return fallback;
   }
 
   let rafId = 0;
@@ -822,6 +908,55 @@ export function initDojo(root, rig) {
     } else if (curBeat < 0) {
       g.fillStyle = C_PLAYHEAD;
       g.fillText(COUNT_TXT, phX + 8, 16);
+      // LISTEN has no count-in — its 0.12 s scheduling lead-in also reads as
+      // curBeat < 0, and must not flash a stray digit
+      if (S.mode !== 'listen') drawCountdown(curBeat);
+    }
+
+    // ---- fretboard (own canvas; positions were solved in refreshDerived) ------
+    if (S.fretView !== 'off') {
+      fbCount = 0;
+      const notes = S.lesson.notes;
+      if (!running || curBeat < 0) {
+        // idle / count-in: first bar dimmed so the fretting hand can set up
+        for (let i = 0; i < notes.length && notes[i].s < bpb; i++) {
+          fbPush(i, notes[i].m + S.transpose, 'upcoming');
+        }
+      } else {
+        const rel = curBeat - iterBase; // beat within the drawn iteration
+        const verdicts = detMode && curIter * LB === iterBase;
+        if (S.fretView === 'note') {
+          let cur = -1, nxt = -1;
+          for (let i = 0; i < notes.length; i++) {
+            const n = notes[i];
+            if (n.s > rel) { nxt = i; break; }
+            if (rel < n.s + n.d) cur = i;
+          }
+          if (nxt < 0 && S.loop && S.mode !== 'score' && notes.length > 0) nxt = 0; // wraps
+          if (cur >= 0) fbPush(cur, notes[cur].m + S.transpose, fbPhase(cur, verdicts, 'current'));
+          if (nxt >= 0 && nxt !== cur) fbPush(nxt, notes[nxt].m + S.transpose, 'next');
+        } else {
+          // 'bar': everything sounding in the current bar, playhead phases
+          const barStart = Math.floor(rel / bpb) * bpb;
+          const barEnd = barStart + bpb;
+          let nextSeen = false;
+          for (let i = 0; i < notes.length; i++) {
+            const n = notes[i];
+            if (n.s >= barEnd) break; // sorted by s
+            if (n.s + n.d <= barStart) continue;
+            let ph;
+            if (rel >= n.s && rel < n.s + n.d) ph = fbPhase(i, verdicts, 'current');
+            else if (rel >= n.s + n.d) ph = fbPhase(i, verdicts, 'past');
+            else if (!nextSeen) { ph = 'next'; nextSeen = true; }
+            else ph = 'upcoming';
+            fbPush(i, n.m + S.transpose, ph);
+          }
+        }
+      }
+      fbView.length = fbCount;
+      fbState.countdownGlow = running && S.mode !== 'listen' && curBeat < 0 && curBeat >= -bpb
+        ? 1 - (curBeat - Math.floor(curBeat)) : 0;
+      fb.draw(fbState);
     }
   }
 
@@ -981,5 +1116,5 @@ export function initDojo(root, rig) {
   syncRaf();
 
   // debugging & automated verification
-  window.__dojo = { S, LESSONS, startRun, stopRun, parseMidi, isRunning: () => running };
+  window.__dojo = { S, LESSONS, startRun, stopRun, parseMidi, isRunning: () => running, fb };
 }

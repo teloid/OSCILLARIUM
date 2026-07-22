@@ -57,6 +57,7 @@ const EN = {
         'TEMPO slows any lesson to 40% while you learn; TRANSPOSE shifts the whole lesson ±12 semitones — play songs in any tuning without retuning your guitar.',
         'LOAD MIDI imports any .mid file as a lesson (melody track auto-extracted). Guitar Pro users: File → Export → MIDI.',
         'Hit notes turn green, partials amber, misses red. Chase the combo counter.',
+        'The virtual FRETBOARD under the roll shows where the notes live — whole bar or note-by-note — lighting up as they play. PRACTICE and SCORE start with a metronome count-in and big on-screen numbers.',
       ],
     },
     {
@@ -139,6 +140,7 @@ const RU = {
         'ТЕМП замедляет любой урок до 40%, пока учитесь; ТРАНСПОЗИЦИЯ сдвигает весь урок на ±12 полутонов — играйте песни в любом строе, не перестраивая гитару.',
         'ЗАГРУЗИТЬ MIDI импортирует любой .mid как урок (мелодическая дорожка выделяется автоматически). Пользователи Guitar Pro: File → Export → MIDI.',
         'Попадания зеленеют, частичные — янтарные, промахи — красные. Гонитесь за счётчиком комбо.',
+        'Виртуальный ГРИФ под лентой показывает, где живут ноты — целым тактом или по одной — и подсвечивает их по ходу игры. PRACTICE и SCORE начинаются с отсчёта метронома и больших цифр на экране.',
       ],
     },
     {

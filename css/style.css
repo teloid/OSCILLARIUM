@@ -432,6 +432,10 @@ body.dojo #modules { display: none; }
   display: block; width: 100%; height: 280px;
   border: 1px solid var(--line); border-radius: 10px; background: var(--bg2);
 }
+.fret-canvas {
+  display: block; width: 100%; height: 200px; margin-top: 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg2);
+}
 .dojo-grade {
   font-family: Georgia, serif; font-size: 84px; line-height: 1;
   color: var(--amber); text-shadow: 0 0 40px rgba(255, 179, 0, 0.5), 0 2px 0 rgba(0, 0, 0, 0.8);

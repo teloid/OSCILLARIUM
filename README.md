@@ -90,6 +90,11 @@ House of the Rising Sun, Pachelbel's Canon lead) on a scrolling piano roll.
 **SCORE** counts you in and grades a full pass **S / A / B / C / D** — with a
 combo counter, because gamification works.
 
+- A **virtual fretboard** under the roll shows where the notes live — whole
+  bar or note-by-note — lighting up as they play, with least-motion position
+  solving and realistic fret geometry.
+- **PRACTICE** and **SCORE** start with a metronome count-in and big
+  on-screen countdown numbers synced to the clicks.
 - **TEMPO** slows anything to 40% while you learn.
 - **TRANSPOSE** shifts a whole lesson ±12 semitones — play drop-tuned songs
   in standard tuning without touching a peg.
