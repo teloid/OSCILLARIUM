@@ -343,6 +343,8 @@ body.vibe #modules { display: none; }
 body.vibe #viz { height: 320px; }
 body:not(.rig) #rig-deck { display: none; }
 body.rig #modules { display: none; }
+body:not(.dojo) #dojo-deck { display: none; }
+body.dojo #modules { display: none; }
 
 /* header LAB|RIG|VIBE and EN|RU rockers */
 #mode-switch, #lang-switch {
@@ -361,9 +363,84 @@ body.rig #modules { display: none; }
   background: var(--danger); color: var(--bg);
   box-shadow: 0 0 12px rgba(255, 84, 112, 0.5);
 }
-#mode-switch[data-mode="vibe"] .ms-half:nth-child(3) {
+#mode-switch[data-mode="dojo"] .ms-half:nth-child(3) {
+  background: var(--acid); color: var(--bg);
+  box-shadow: 0 0 12px rgba(157, 255, 0, 0.45);
+}
+#mode-switch[data-mode="vibe"] .ms-half:nth-child(4) {
   background: var(--amber); color: var(--bg);
   box-shadow: 0 0 12px rgba(255, 179, 0, 0.45);
+}
+
+/* ===================== INFO (field manual) ===================== */
+
+#info-btn {
+  width: 36px; height: 36px; border-radius: 50%; flex: none;
+  font-family: Georgia, serif; font-size: 17px; font-style: italic;
+  color: var(--ink-dim); background: var(--bg2);
+  border: 1px solid var(--line); cursor: pointer;
+  transition: all 0.15s ease;
+}
+#info-btn:hover { color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 12px rgba(0, 229, 255, 0.35); }
+
+.info-overlay[hidden] { display: none; } /* display:flex below would defeat the hidden attribute */
+.info-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(7, 7, 12, 0.72);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 20px;
+}
+.info-panel {
+  max-width: 860px; width: 100%; max-height: calc(100vh - 80px);
+  overflow-y: auto; border-radius: 14px;
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+}
+.info-head {
+  position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 26px; border-bottom: 1px solid var(--line);
+  background: var(--panel2);
+}
+.info-title {
+  margin: 0; font-size: 16px; letter-spacing: 0.24em; font-weight: 700;
+  background: linear-gradient(90deg, var(--cyan), var(--magenta), var(--amber));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.info-close {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--bg2); color: var(--ink-dim); cursor: pointer; font-size: 14px;
+}
+.info-close:hover { color: var(--danger); border-color: var(--danger); }
+.info-body { padding: 10px 26px 30px; }
+.info-section h3 {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--amber); margin: 26px 0 8px;
+}
+.info-section p { color: var(--ink); font-size: 14px; line-height: 1.75; margin: 8px 0; }
+.info-section ul { margin: 6px 0; padding-left: 22px; }
+.info-section li { color: var(--ink); font-size: 13.5px; line-height: 1.8; }
+.info-section li::marker { color: var(--ink-faint); }
+
+/* ===================== DOJO (lessons) ===================== */
+
+#dojo-deck { padding: 0 28px 36px; }
+.dojo-wrap { max-width: 1240px; margin: 0 auto; }
+.dojo-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+.lesson-canvas {
+  display: block; width: 100%; height: 280px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg2);
+}
+.dojo-grade {
+  font-family: Georgia, serif; font-size: 84px; line-height: 1;
+  color: var(--amber); text-shadow: 0 0 40px rgba(255, 179, 0, 0.5), 0 2px 0 rgba(0, 0, 0, 0.8);
+}
+.dojo-stats { font-family: var(--mono); font-size: 13px; color: var(--ink); line-height: 1.9; }
+.dojo-hint { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 8px 2px; }
+.dojo-combo {
+  font-family: var(--mono); font-size: 22px; color: var(--acid);
+  text-shadow: 0 0 16px rgba(157, 255, 0, 0.6); min-width: 90px;
 }
 
 /* ===================== RIG (pedalboard) ===================== */

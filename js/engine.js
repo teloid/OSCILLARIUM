@@ -30,6 +30,11 @@ export const Engine = {
     try {
       const lh = localStorage.getItem('osc-latency');
       if (lh === 'balanced' || lh === 'playback') latencyHint = lh;
+      else if (lh) {
+        // numeric buffer target in seconds (RIG panel) — the hardware clamps it
+        const secs = parseFloat(lh);
+        if (secs >= 0.001 && secs <= 0.3) latencyHint = secs;
+      }
       const sr = parseInt(localStorage.getItem('osc-samplerate') || '', 10);
       if (sr >= 8000 && sr <= 96000) sampleRate = sr;
     } catch (e) { /* private mode */ }

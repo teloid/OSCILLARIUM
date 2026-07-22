@@ -72,9 +72,35 @@ synthesized **cabinet IRs**: 4×12 modern/vintage, 2×12 glass, 1×8 lofi),
 *creepy* (séance, poltergeist, mariana trench, graveyard wind, submarine).
 
 Also on the input strip: a real **tuner** (autocorrelation pitch detection,
-±5¢ accuracy, cents needle) and **latency / sample-rate controls** (applied at
-AudioContext creation, measured output latency displayed live). A built-in
+±5¢ accuracy, cents needle) and a **buffer control** (request 5/10/20/50 ms —
+the readout shows what the hardware actually granted). A built-in
 Karplus-Strong **test pluck** plays the chain when nothing is plugged in.
+Want drop tuning without retuning? Pitch pedal, −2 semitones, mix 100%.
+
+## The DOJO
+
+Interactive lessons — the site *listens to your actual playing* and scores it.
+
+![DOJO](docs/dojo.png)
+
+Eight built-in lessons (pentatonic and harmonic-minor licks, a blues shuffle,
+a chromatic spider, plus public-domain classics — Ode to Joy, Greensleeves,
+House of the Rising Sun, Pachelbel's Canon lead) on a scrolling piano roll.
+**LISTEN** plays a lesson, **PRACTICE** loops it with live hit/miss coloring,
+**SCORE** counts you in and grades a full pass **S / A / B / C / D** — with a
+combo counter, because gamification works.
+
+- **TEMPO** slows anything to 40% while you learn.
+- **TRANSPOSE** shifts a whole lesson ±12 semitones — play drop-tuned songs
+  in standard tuning without touching a peg.
+- **LOAD MIDI** imports any `.mid` as a lesson (melody track auto-extracted,
+  monophonic reduction). Guitar Pro users: *File → Export → MIDI*.
+- Detection is monophonic by design — licks, riffs, solos, melodies. The
+  scorer was verified with a synthetic player: correct notes earn an S,
+  wrong notes earn a D. It cannot be flattered.
+
+The **?** button in the header opens a bilingual field manual covering all of
+this in-app.
 
 Not an amp sim — your modeler keeps its job. This is the weird pedal shelf
 it never had.
@@ -144,6 +170,13 @@ OSCILLARIUM — частотная лаборатория для ушей, же�
 Режим **VIBE** — деревянный пульт со стрелочным индикатором, селектором сцен и
 пятью макро-ручками (тон, октава, накал, разум, темп). Переключатель **EN | RU**
 в шапке — и весь интерфейс по-русски.
+
+Режим **RIG** — живая гитара через аудиоинтерфейс: девять синтезированных
+педалей (включая кабинеты 4×12 и кривую «метал»), тюнер, буфер задержки,
+пресеты от «скрипичного сустейна» до «кладбищенского ветра». Режим **DOJO** —
+интерактивные уроки: сайт слышит ваши настоящие ноты и ставит оценку S–D;
+темп, транспозиция, импорт MIDI. Кнопка **?** в шапке — полное руководство
+на двух языках.
 
 Запуск: любой статический сервер (`python3 -m http.server 4173`) — и в браузер.
 Лучше в наушниках, начинайте с малой громкости. Берегите уши; звуковая

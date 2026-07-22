@@ -5,6 +5,8 @@ import { t, lang, setLang, registerDict } from './i18n.js';
 import { initViz } from './viz.js';
 import { initVibe } from './vibe.js';
 import { initRig } from './rig.js';
+import { initDojo } from './dojo.js';
+import { initInfo } from './info.js';
 
 registerDict('ru', { 'master': 'мастер' });
 import binaural from './modules/binaural.js';
@@ -68,8 +70,13 @@ const vol = UI.slider({
 });
 document.getElementById('master-vol').append(vol.el);
 
+const info = initInfo();
+document.getElementById('info-btn').addEventListener('click', () => info.open());
+
 document.getElementById('stop-all').addEventListener('click', () => Engine.stopAll());
 window.addEventListener('keydown', (e) => {
+  // the manual overlay owns Escape while open — close it, don't panic-stop
+  if (e.key === 'Escape' && info.isOpen()) { info.close(); return; }
   const t = e.target;
   if (t && t.matches && t.matches('input, select, textarea')) {
     // Let the control consume Escape (dismiss dropdown / cancel edit), then
@@ -103,13 +110,15 @@ modeBtns.forEach((b) => b.addEventListener('click', () => selectVizMode(b.datase
 // ---- vibe deck ------------------------------------------------------------------
 
 initVibe(document.getElementById('vibe-deck'), MODULES.map((m) => m.mod), selectVizMode);
-initRig(document.getElementById('rig-deck'));
+const rigApi = initRig(document.getElementById('rig-deck'));
+initDojo(document.getElementById('dojo-deck'), rigApi);
 
 const modeBtn = document.getElementById('mode-switch');
 function setUiMode(mode) {
-  if (mode !== 'lab' && mode !== 'rig' && mode !== 'vibe') mode = 'lab';
+  if (mode !== 'lab' && mode !== 'rig' && mode !== 'dojo' && mode !== 'vibe') mode = 'lab';
   document.body.classList.toggle('vibe', mode === 'vibe');
   document.body.classList.toggle('rig', mode === 'rig');
+  document.body.classList.toggle('dojo', mode === 'dojo');
   modeBtn.setAttribute('data-mode', mode);
   try { localStorage.setItem('osc-mode', mode); } catch (e) { /* private mode */ }
 }

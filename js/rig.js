@@ -7,6 +7,7 @@ import { Engine } from './engine.js';
 import * as UI from './ui.js';
 import { t, registerDict } from './i18n.js';
 import { FACTORIES, FX_ORDER } from './fx.js';
+import { createPitchDetector } from './pitch.js';
 
 registerDict('ru', {
   'INPUT': 'ВХОД', 'OUTPUT': 'ВЫХОД', 'source': 'источник', 'device': 'устройство', 'input': 'вход',
@@ -28,9 +29,9 @@ registerDict('ru', {
   'warm': 'тёплый', 'tube': 'ламповый', 'fuzz': 'фузз', 'octave': 'октавный', 'metal': 'метал',
   'cab': 'кабинет', 'model': 'модель', 'tight': 'тайт',
   '4×12 modern': '4×12 модерн', '4×12 vintage': '4×12 винтаж', '2×12 glass': '2×12 стекло', '1×8 lofi': '1×8 лоуфай',
-  'tuner': 'тюнер', 'latency': 'задержка', 'sample rate': 'частота дискр.',
-  'lowest (live)': 'минимальная (живьём)', 'balanced': 'сбалансированная', 'safe (glitch-free)': 'надёжная (без щелчков)',
-  'auto': 'авто', 'changing latency or sample rate reloads the page.': 'смена задержки или частоты дискретизации перезагружает страницу.',
+  'tuner': 'тюнер', 'buffer': 'буфер', 'auto': 'авто',
+  'the buffer is a request — the readout shows what the hardware actually granted. changing it reloads the page.':
+    'буфер — это запрос; в индикаторе то, что реально дало железо. смена перезагружает страницу.',
   'modern metal': 'модерн-метал',
   'djent': 'джент', 'doom wall': 'стена дума', 'silver lead': 'серебряное соло', 'frost': 'иней',
   'crystal clean': 'кристальный клин', 'submarine': 'субмарина',
@@ -348,6 +349,7 @@ export function initRig(root) {
   let built = false;
   let inGain = null, meterAn = null, tunerAn = null, rigBus = null;
   let tunerOn = false;
+  let pitchDet = null;
   let micStream = null, micNode = null;
   let armSeq = 0; // arm() re-entrancy guard — only the newest request wins the mic
   let plucker = null;
@@ -366,6 +368,7 @@ export function initRig(root) {
     tunerAn = ctx.createAnalyser();
     tunerAn.fftSize = 2048;
     inGain.connect(tunerAn);
+    pitchDet = createPitchDetector(tunerAn);
 
     let prev = inGain;
     for (const p of PEDALS) {
@@ -640,73 +643,37 @@ export function initRig(root) {
     },
   });
 
-  let storedLat = 'interactive', storedSr = '';
+  let storedBuf = '';
   try {
-    storedLat = localStorage.getItem('osc-latency') || 'interactive';
-    storedSr = localStorage.getItem('osc-samplerate') || '';
+    const raw = localStorage.getItem('osc-latency') || '';
+    storedBuf = /^0\.\d+$/.test(raw) ? raw : ''; // legacy word values → auto
   } catch (e) { /* private mode */ }
-  const latSel = UI.select({
-    label: t('latency'),
-    options: [
-      { value: 'interactive', label: t('lowest (live)') },
-      { value: 'balanced', label: t('balanced') },
-      { value: 'playback', label: t('safe (glitch-free)') },
-    ],
-    value: storedLat,
-    onChange: (v) => { try { localStorage.setItem('osc-latency', v); } catch (e) {} location.reload(); },
-  });
-  const srSel = UI.select({
-    label: t('sample rate'),
+  const bufSel = UI.select({
+    label: t('buffer'),
     options: [
       { value: '', label: t('auto') },
-      { value: '44100', label: '44.1 kHz' },
-      { value: '48000', label: '48 kHz' },
-      { value: '96000', label: '96 kHz' },
+      { value: '0.005', label: '5 ms' },
+      { value: '0.01', label: '10 ms' },
+      { value: '0.02', label: '20 ms' },
+      { value: '0.05', label: '50 ms' },
     ],
-    value: storedSr,
-    onChange: (v) => { try { localStorage.setItem('osc-samplerate', v); } catch (e) {} location.reload(); },
+    value: storedBuf,
+    onChange: (v) => {
+      try {
+        if (v) localStorage.setItem('osc-latency', v);
+        else localStorage.removeItem('osc-latency');
+      } catch (e) { /* private mode */ }
+      location.reload();
+    },
   });
   const latInfo = UI.readout('—');
-  tunerRow.append(tunerT.el, tunerNote.el, tunerCv, latSel.el, srSel.el, latInfo.el);
+  tunerRow.append(tunerT.el, tunerNote.el, tunerCv, bufSel.el, latInfo.el);
   strip.append(tunerRow);
-  strip.append(elem('div', 'rig-hint', t('changing latency or sample rate reloads the page.')));
+  strip.append(elem('div', 'rig-hint', t('the buffer is a request — the readout shows what the hardware actually granted. changing it reloads the page.')));
 
-  const tBuf = new Float32Array(2048);
-  // normalized autocorrelation with parabolic refinement (55–1000 Hz window)
+  // shared detector (js/pitch.js) — the DOJO scores through the same one
   function detectPitch() {
-    if (!tunerAn || !Engine.ready) return -1;
-    tunerAn.getFloatTimeDomainData(tBuf);
-    const sr = Engine.ctx.sampleRate;
-    const SIZE = tBuf.length;
-    let rms = 0;
-    for (let i = 0; i < SIZE; i++) rms += tBuf[i] * tBuf[i];
-    rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.004) return -1;
-    const maxLag = Math.min(Math.floor(sr / 55), SIZE >> 1);
-    const minLag = Math.max(2, Math.floor(sr / 1000));
-    const c = new Float32Array(maxLag + 2);
-    for (let lag = 0; lag <= maxLag + 1; lag++) {
-      let sum = 0;
-      for (let i = 0; i < SIZE - lag; i++) sum += tBuf[i] * tBuf[i + lag];
-      c[lag] = sum / (SIZE - lag); // unbiased — the raw sum tapers with lag and reads sharp
-    }
-    let lag0 = minLag;
-    while (lag0 < maxLag && c[lag0] > c[lag0 + 1]) lag0++; // walk off the zero-lag peak
-    let bestLag = -1, best = -Infinity;
-    for (let lag = lag0; lag <= maxLag; lag++) {
-      if (c[lag] > best) { best = c[lag]; bestLag = lag; }
-    }
-    if (bestLag <= 0 || best < 0.3 * c[0]) return -1; // weak periodicity — noise, not a note
-    // The global max often sits on a period MULTIPLE (octave-down error) —
-    // take the smallest local peak within 10% of it instead.
-    let pick = bestLag;
-    for (let lag = lag0 + 1; lag < bestLag; lag++) {
-      if (c[lag] >= c[lag - 1] && c[lag] >= c[lag + 1] && c[lag] >= 0.9 * best) { pick = lag; break; }
-    }
-    const y1 = c[pick - 1], y2 = c[pick], y3 = c[pick + 1];
-    const denom = 2 * (2 * y2 - y1 - y3);
-    const shift = denom ? (y3 - y1) / denom : 0;
-    return sr / (pick + shift);
+    return (pitchDet && Engine.ready) ? pitchDet.detect(Engine.ctx.sampleRate) : -1;
   }
 
   function paintTuner(freq) {
@@ -733,7 +700,7 @@ export function initRig(root) {
       const n = Math.round(midi);
       const cents = (midi - n) * 100;
       const name = NOTE_N[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
-      tunerNote.set(`${name} · ${freq.toFixed(1)} ${t('Hz')} · ${cents >= 0 ? '+' : ''}${cents.toFixed(0)}¢`);
+      tunerNote.set(`${name} · ${freq.toFixed(1)} ${t('Hz')}`);
       const x = cx + (Math.max(-50, Math.min(50, cents)) / 50) * span;
       const inTune = Math.abs(cents) < 5;
       cg.strokeStyle = inTune ? '#48dbc3' : Math.abs(cents) < 15 ? '#ffb300' : '#ff5470';
@@ -900,5 +867,13 @@ export function initRig(root) {
   }
   requestAnimationFrame(meterLoop);
 
-  return { applyPreset };
+  // The DOJO listens on the rig's pre-chain analyser (dry signal) and reuses
+  // the same arm/permission flow — one microphone owner, one panic path.
+  return {
+    applyPreset,
+    arm,
+    isArmed: () => S.armed,
+    ensureChain: () => buildChain(),
+    inputAnalyser: () => tunerAn,
+  };
 }
