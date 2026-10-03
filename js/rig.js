@@ -3,7 +3,7 @@
 // drive here exists for sustain and clarity, and the rest exists for magic
 // and dread. A built-in Karplus-Strong test pluck plays the chain even with
 // nothing plugged in.
-import { Engine } from './engine.js';
+import { Engine, Transport } from './engine.js';
 import * as UI from './ui.js';
 import { t, registerDict } from './i18n.js';
 import { FACTORIES, FX_ORDER } from './fx.js';
@@ -29,6 +29,12 @@ registerDict('ru', {
   'warm': 'тёплый', 'tube': 'ламповый', 'fuzz': 'фузз', 'octave': 'октавный', 'metal': 'метал',
   'cab': 'кабинет', 'model': 'модель', 'tight': 'тайт',
   '4×12 modern': '4×12 модерн', '4×12 vintage': '4×12 винтаж', '2×12 glass': '2×12 стекло', '1×8 lofi': '1×8 лоуфай',
+  'LOOPER': 'ЛУПЕР', 'looper': 'лупер', 'FEED': 'ПИСАТЬ', 'FEEDING': 'ПИШЕТ', 'CLEAR': 'СТЕРЕТЬ',
+  'one lap': 'один круг', 'loop bars': 'такты лупа', 'repeats': 'повторы', 'loop level': 'уровень лупа',
+  'drums': 'барабаны', 'solo': 'соло', 'sec': 'с',
+  'off the grid': 'не по сетке', 'RE-CUT': 'ПЕРЕРЕЗАТЬ',
+  'one click on FEED, then play — the tape is an exact number of bars, so your phrase lands in time by itself. changing the length wipes it. keys: R feed · C clear.':
+    'один клик по ПИСАТЬ — и играйте: лента длиной ровно в такты, поэтому фраза сама попадает в ритм. смена длины стирает её. клавиши: R писать · C стереть.',
   'tuner': 'тюнер', 'buffer': 'буфер', 'auto': 'авто',
   'the buffer is a request — the readout shows what the hardware actually granted. changing it reloads the page.':
     'буфер — это запрос; в индикаторе то, что реально дало железо. смена перезагружает страницу.',
@@ -326,6 +332,20 @@ const PRESET_GROUPS = [
   },
 ];
 
+// The looper rides at the end of the chain (what you hear is what it keeps),
+// but it gets a panel of its own instead of a slot in the pedal grid — its
+// controls have to be big enough to hit while holding a guitar.
+const LOOPER = {
+  id: 'looper', name: 'looper', accent: '#ff5470',
+  controls: [
+    { key: 'length', def: 2.4 },
+    { key: 'feedback', def: 1 },
+    { key: 'tone', def: 6000 },
+    { key: 'level', def: 0.9 },
+  ],
+};
+const CHAIN = [...PEDALS, LOOPER];
+
 const PLUCK_NOTES = [82.41, 110, 146.83, 196]; // E2 A2 D3 G3
 
 function elem(tag, cls, text) {
@@ -338,7 +358,7 @@ function elem(tag, cls, text) {
 export function initRig(root) {
   // desired state survives before/without the audio graph
   const PST = {};
-  for (const p of PEDALS) {
+  for (const p of CHAIN) {
     PST[p.id] = { on: false, params: {} };
     for (const c of p.controls) PST[p.id].params[c.key] = c.def;
   }
@@ -371,7 +391,7 @@ export function initRig(root) {
     pitchDet = createPitchDetector(tunerAn);
 
     let prev = inGain;
-    for (const p of PEDALS) {
+    for (const p of CHAIN) {
       const fx = FACTORIES[p.id](ctx);
       const wet = ctx.createGain(), dry = ctx.createGain(), sum = ctx.createGain();
       prev.connect(fx.input);
@@ -729,6 +749,215 @@ export function initRig(root) {
   const hint = elem('div', 'rig-hint', t('the chain runs left to right — stomp a pedal to bring it in.'));
   wrap.append(strip, warn, hint);
 
+  // ---- looper --------------------------------------------------------------------
+  // Sits last in the chain but first on the page: these are the controls you
+  // reach for mid-phrase, so they live where you can hit them without aiming.
+  const loopWrap = elem('div', 'looper-panel');
+  const loopHead = elem('div', 'looper-head');
+  const loopPower = UI.power({
+    title: t('looper'),
+    onChange: (on) => { PST.looper.on = on; buildChain(); routeSource(); applyPedal('looper'); },
+  });
+  loopPower.el.classList.add('stomp');
+  loopHead.append(elem('div', 'rig-title', t('LOOPER')), loopPower.el);
+
+  const tapeCv = elem('canvas', 'loop-tape');
+  let barSecs = (4 * 60) / 100; // last bar length the drummer reported
+
+  const barsSel = UI.select({
+    label: t('loop bars'),
+    options: ['1', '2', '4', '8'].map((v) => ({ value: v, label: v })),
+    value: '2',
+    onChange: () => syncLength(),
+  });
+  const bpmBox = UI.numberBox({
+    label: t('bpm (solo)'), value: 100, min: 40, max: 240, step: 1,
+    onChange: () => syncLength(),
+  });
+  const loopInfo = UI.readout('—');
+
+  const LOOP_MAX = 48; // s — 8 bars at 40 bpm, the slowest this panel allows
+  const loopBars = () => parseInt(barsSel.get(), 10) || 2;
+  const drumsDriving = () => Transport.driver === 'drums';
+  const oneBarSecs = () => (drumsDriving() ? barSecs : (4 * 60) / bpmBox.get());
+  let offGrid = false; // tape no longer matches the drummer, but has something on it
+
+  // The tape is always a whole number of bars — that is the whole trick, and
+  // it is why a length change has to wipe it: a new circumference cannot hold
+  // the old lap. When the drum machine owns the transport we take its real bar
+  // length (it may be in 7/8); otherwise we work out 4/4 bars from our own bpm.
+  // An overlong tape drops BARS, never seconds: clamping the seconds would
+  // quietly void the one invariant everything else here rests on.
+  function barsThatFit(oneBar) {
+    let bars = loopBars();
+    while (bars > 1 && bars * oneBar > LOOP_MAX) bars /= 2; // the options are 1/2/4/8
+    return bars;
+  }
+  function syncLength() {
+    const oneBar = oneBarSecs();
+    const bars = barsThatFit(oneBar);
+    if (bars !== loopBars()) barsSel.set(String(bars));
+    PST.looper.params.length = bars * oneBar;
+    offGrid = false;
+    if (live.looper) applyPedal('looper');
+    paintLoopInfo();
+  }
+
+  // Ground truth for both readouts is the tape itself, never a recomputation:
+  // the panel must not be able to claim a length the tape does not have.
+  function tapeLen() {
+    const fx = live.looper && live.looper.fx;
+    return fx ? fx.state().len : PST.looper.params.length;
+  }
+  function paintLoopInfo() {
+    const len = tapeLen();
+    const bars = loopBars();
+    const bpm = Math.round(drumsDriving() ? Transport.bpm : bpmBox.get());
+    const src = drumsDriving() ? t('drums') : t('solo');
+    loopInfo.set(offGrid
+      ? `⚠ ${t('off the grid')} · ${len.toFixed(2)} ${t('sec')} · ${bpm} bpm ${src}`
+      : `${bars} × ${(len / bars).toFixed(2)} = ${len.toFixed(2)} ${t('sec')} · ${bpm} bpm · ${src}`);
+    recutBtn.style.display = offGrid ? '' : 'none';
+  }
+
+  // Drums starting, stopping or changing tempo moves the grid under the tape.
+  // An empty tape is just re-cut; one with something on it is left alone and
+  // the panel offers a RE-CUT, because nothing should wipe work unasked.
+  function checkGrid() {
+    if (!drumsDriving()) { offGrid = false; paintLoopInfo(); return; }
+    const want = barsThatFit(barSecs) * barSecs;
+    const fx = live.looper && live.looper.fx;
+    if (Math.abs(tapeLen() - want) <= 0.001) { offGrid = false; paintLoopInfo(); return; }
+    if (fx && fx.state().content) { offGrid = true; paintLoopInfo(); }
+    else syncLength();
+  }
+
+  // One press arms everything it needs — nobody should have to switch the
+  // pedal on, unmute the rig and then find the record button mid-phrase.
+  function loopReady() {
+    buildChain();
+    if (!PST.looper.on) { PST.looper.on = true; loopPower.set(true); applyPedal('looper'); }
+    setOut(true);
+    routeSource();
+    return live.looper ? live.looper.fx : null;
+  }
+  function feedPress() {
+    const fx = loopReady();
+    if (!fx) return;
+    fx.feed(!fx.state().feeding, oneLapT.get());
+    paintFeed();
+  }
+  function loopClear() {
+    const fx = live.looper && live.looper.fx;
+    if (fx) { fx.clear(); paintFeed(); }
+  }
+
+  const feedBtn = UI.button({ label: '● ' + t('FEED'), kind: 'primary', onClick: feedPress });
+  feedBtn.classList.add('loop-feed');
+  const oneLapT = UI.toggle({ label: t('one lap'), value: true });
+  const clearBtn = UI.button({ label: '✕ ' + t('CLEAR'), kind: 'danger', onClick: loopClear });
+  const recutBtn = UI.button({ label: '⟲ ' + t('RE-CUT'), onClick: () => syncLength() });
+  recutBtn.style.display = 'none';
+
+  const repKnob = UI.knob({
+    label: t('repeats'), min: 0, max: 1, value: 1, size: 52,
+    format: (v) => (v >= 0.999 ? '∞' : Math.round(v * 100) + '%'),
+    onInput: (v) => { PST.looper.params.feedback = v; applyPedal('looper'); },
+  });
+  const LT_MIN = 1000, LT_MAX = 18000;
+  const ltVal = (p01) => LT_MIN * Math.pow(LT_MAX / LT_MIN, p01);
+  const ltPos = (v) => Math.log(v / LT_MIN) / Math.log(LT_MAX / LT_MIN);
+  const loopToneKnob = UI.knob({
+    label: t('tone'), min: 0, max: 1, value: ltPos(6000), size: 52,
+    format: (v) => (ltVal(v) / 1000).toFixed(1) + 'k',
+    onInput: (v) => { PST.looper.params.tone = ltVal(v); applyPedal('looper'); },
+  });
+  const loopLvlKnob = UI.knob({
+    label: t('loop level'), min: 0, max: 1, value: 0.9, size: 52,
+    format: (v) => Math.round(v * 100) + '%',
+    onInput: (v) => { PST.looper.params.level = v; applyPedal('looper'); },
+  });
+
+  const loopRow = elem('div', 'rig-io');
+  loopRow.append(feedBtn, oneLapT.el, clearBtn, barsSel.el, bpmBox.el,
+    repKnob.el, loopToneKnob.el, loopLvlKnob.el, loopInfo.el, recutBtn);
+  loopWrap.append(loopHead, tapeCv, loopRow, elem('div', 'rig-hint',
+    t('one click on FEED, then play — the tape is an exact number of bars, so your phrase lands in time by itself. changing the length wipes it. keys: R feed · C clear.')));
+  wrap.append(loopWrap);
+  syncLength();
+
+  // Follow the drummer. Comparing against the tape we actually have (rather
+  // than against the previous tempo reading) means a stale cached bar length
+  // can never leave the loop silently unlocked.
+  Engine.on('bar', (e) => {
+    if (!e || !(e.secsPerBar > 0)) return;
+    barSecs = e.secsPerBar;
+    checkGrid();
+  });
+
+  // Drums stopping emits no bar event, so the driver is polled instead.
+  let lastDriver = null;
+  function checkDriver() {
+    if (Transport.driver === lastDriver) return;
+    lastDriver = Transport.driver;
+    checkGrid();
+  }
+
+  let lastFeeding = null;
+  function paintFeed() {
+    const fx = live.looper && live.looper.fx;
+    const feeding = !!(fx && fx.state().feeding);
+    if (feeding === lastFeeding) return; // only touch the DOM on a flip
+    lastFeeding = feeding;
+    feedBtn.textContent = '● ' + (feeding ? t('FEEDING') : t('FEED'));
+    feedBtn.classList.toggle('active', feeding);
+  }
+
+  const tg = tapeCv.getContext('2d');
+  function drawTape() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(tapeCv.clientWidth * dpr));
+    const h = Math.max(1, Math.round(tapeCv.clientHeight * dpr));
+    if (tapeCv.width !== w || tapeCv.height !== h) { tapeCv.width = w; tapeCv.height = h; }
+    const fx = live.looper && live.looper.fx;
+    const st = fx ? fx.state() : null;
+    tg.clearRect(0, 0, w, h);
+    tg.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    tg.fillRect(0, 0, w, h);
+    if (st && st.content) {
+      tg.fillStyle = st.feeding ? 'rgba(255, 84, 112, 0.14)' : 'rgba(72, 219, 195, 0.09)';
+      tg.fillRect(0, 0, w, h);
+    }
+    // bar segments: alternate tint, bright line on each bar edge
+    const bars = loopBars();
+    for (let i = 0; i < bars; i++) {
+      if (i % 2) {
+        tg.fillStyle = 'rgba(255, 255, 255, 0.025)';
+        tg.fillRect((i / bars) * w, 0, w / bars, h);
+      }
+      tg.fillStyle = 'rgba(141, 138, 168, 0.5)';
+      tg.fillRect(Math.round((i / bars) * w), 0, Math.max(1, dpr), h);
+    }
+    if (st) {
+      const hx = st.phase * w;
+      // a short fading trail so the direction of travel reads at a glance
+      const trail = Math.min(hx, w * 0.06);
+      if (trail > 1) {
+        tg.fillStyle = st.feeding ? 'rgba(255, 84, 112, 0.22)' : 'rgba(72, 219, 195, 0.2)';
+        tg.fillRect(hx - trail, 0, trail, h);
+      }
+      tg.fillStyle = st.feeding ? '#ff5470' : '#48dbc3';
+      tg.fillRect(hx - dpr, 0, Math.max(2, 2.5 * dpr), h);
+    }
+    tg.fillStyle = st && st.feeding ? '#ff5470' : 'rgba(233, 231, 247, 0.75)';
+    tg.font = `${Math.round(11 * dpr)}px ui-monospace, monospace`;
+    tg.textAlign = 'center';
+    const label = st && st.feeding
+      ? `${t('FEEDING')} · ${st.feedLeft > 0 ? st.feedLeft.toFixed(1) + ' ' + t('sec') : '∞'}`
+      : `${bars} × ${(PST.looper.params.length / bars).toFixed(2)} ${t('sec')}`;
+    tg.fillText(label, w / 2, h / 2 + 4 * dpr);
+  }
+
   // pedalboard
   const board = elem('div', 'pedalboard');
   for (const p of PEDALS) {
@@ -833,6 +1062,10 @@ export function initRig(root) {
     setOut(false);
     disarm();
     if (autoTimer) { clearInterval(autoTimer); autoTimer = null; autoT.set(false); S.autoPluck = false; }
+    // The tape keeps what is on it — panic means silence, not amnesia — but an
+    // open record gate must never survive the panic button.
+    const lfx = live.looper && live.looper.fx;
+    if (lfx) { lfx.feed(false); paintFeed(); }
   });
 
   // ---- meter loop --------------------------------------------------------------
@@ -840,6 +1073,11 @@ export function initRig(root) {
   const mBuf = new Float32Array(1024);
   let clipHold = 0;
   function meterLoop() {
+    if (document.body.classList.contains('rig')) {
+      checkDriver();
+      drawTape();
+      paintFeed();
+    }
     if (document.body.classList.contains('rig') && meterAn) {
       meterAn.getFloatTimeDomainData(mBuf);
       let sum = 0, pk = 0;
@@ -871,6 +1109,8 @@ export function initRig(root) {
   // the same arm/permission flow — one microphone owner, one panic path.
   return {
     applyPreset,
+    looperFeed: feedPress,
+    looperClear: loopClear,
     arm,
     isArmed: () => S.armed,
     ensureChain: () => buildChain(),

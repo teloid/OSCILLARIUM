@@ -77,6 +77,24 @@ the readout shows what the hardware actually granted). A built-in
 Karplus-Strong **test pluck** plays the chain when nothing is plugged in.
 Want drop tuning without retuning? Pitch pedal, −2 semitones, mix 100%.
 
+### The LOOPER
+
+![The looper](docs/looper.png)
+
+Making something to play against shouldn't mean aiming a mouse at a boundary
+while holding a guitar — so this looper has no record transport at all. It is
+a **rotating tape**: a delay line whose length is an exact whole number of
+bars, with feedback at unity. Press FEED (or the `R` key) whenever you like,
+play a phrase, and it comes back **one lap later, in time, by construction** —
+"one lap" mode releases the input by itself, so one untimed click is the
+entire interaction. `C` wipes it.
+
+**REPEATS** is the whole personality: at ∞ it's a looper (measured: 0.52 →
+0.39 → 0.35 → 0.32 → 0.29 per lap, a slow tape fade); pull it to ~50% and the
+same tape is a long delay that eats itself (0.52 → 0.40 → 0.21 → 0.11 → 0.06).
+TONE darkens every pass like real tape. With the drum machine running the loop
+locks to its bars automatically — including 7/8.
+
 ## The DOJO
 
 Interactive lessons — the site *listens to your actual playing* and scores it.

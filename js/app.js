@@ -75,8 +75,12 @@ document.getElementById('info-btn').addEventListener('click', () => info.open())
 
 document.getElementById('stop-all').addEventListener('click', () => Engine.stopAll());
 window.addEventListener('keydown', (e) => {
-  // the manual overlay owns Escape while open — close it, don't panic-stop
-  if (e.key === 'Escape' && info.isOpen()) { info.close(); return; }
+  // the manual overlay owns the keyboard while open: Escape closes it, and no
+  // other shortcut should fire at a reader
+  if (info.isOpen()) {
+    if (e.key === 'Escape') info.close();
+    return;
+  }
   const t = e.target;
   if (t && t.matches && t.matches('input, select, textarea')) {
     // Let the control consume Escape (dismiss dropdown / cancel edit), then
@@ -88,6 +92,12 @@ window.addEventListener('keydown', (e) => {
   // 1-7 play the chord degrees when the CHORDS module is powered
   if (e.key >= '1' && e.key <= '7' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
     if (chords.remote && chords.remote.isOn()) chords.remote.play(e.key.charCodeAt(0) - 49);
+  }
+  // The looper's footswitches, for hands that are busy: R feeds a lap, C wipes
+  // the tape. RIG only, and never when a modifier is down (Cmd+R is a reload).
+  if (document.body.classList.contains('rig') && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (e.key === 'r' || e.key === 'R') rigApi.looperFeed();
+    else if (e.key === 'c' || e.key === 'C') rigApi.looperClear();
   }
 });
 

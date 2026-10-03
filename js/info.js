@@ -46,6 +46,9 @@ const EN = {
         'BUFFER: how much latency you trade for stability — try 5 ms, the readout shows what the hardware actually granted.',
         'No guitar handy? The test pluck plays the chain by itself.',
         'Want drop tuning without retuning? Pitch pedal, semis −2, mix 100%.',
+        'LOOPER — build something to play against, with one untimed click. The tape is always a whole number of bars, so press FEED (or the R key), play your phrase, and it comes back in time, forever: "one lap" releases the input by itself after exactly one lap. C (or CLEAR) wipes it.',
+        'REPEATS is the whole personality: at ∞ it is a looper, pull it down and the same tape is a long delay that slowly eats itself. TONE darkens each pass like real tape. Changing the loop length wipes it — a new circumference cannot hold the old lap.',
+        'With the drum machine running, the loop locks to its bars automatically (7/8 included). Otherwise set the bpm here.',
       ],
     },
     {
@@ -129,6 +132,9 @@ const RU = {
         'БУФЕР: сколько задержки вы меняете на стабильность — попробуйте 5 мс; индикатор покажет, что реально дало железо.',
         'Нет гитары под рукой? Тестовый щипок сыграет по цепочке сам.',
         'Дроп-строй без перестройки? Педаль питч: полутона −2, микс 100%.',
+        'ЛУПЕР — сделайте себе аккомпанемент одним кликом, не ловя момент. Лента всегда длиной ровно в такты: нажмите ПИСАТЬ (или клавишу R), сыграйте фразу — и она вернётся в ритм, навсегда. Режим «один круг» сам отпускает вход ровно через круг. C (или СТЕРЕТЬ) стирает ленту.',
+        'ПОВТОРЫ — это весь характер: на ∞ это лупер, убавьте — и та же лента становится длинным дилэем, который медленно съедает сам себя. ТОН затемняет каждый проход, как настоящая лента. Смена длины стирает ленту: новая длина не удержит старый круг.',
+        'Когда играет драм-машина, луп сам цепляется к её тактам (включая 7/8). Иначе задайте bpm здесь.',
       ],
     },
     {

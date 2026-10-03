@@ -1164,10 +1164,196 @@ export function createReverb(ctx) {
   };
 }
 
+// ---- looper -----------------------------------------------------------------------
+// A rotating tape, not a transport. The delay line IS the loop, so its length —
+// an exact number of bars — is the only timing that exists: whatever you play
+// comes back one lap later, on the beat, by construction. That is the whole
+// trick, because it means no click ever has to land on a boundary (hopeless
+// with a guitar in your hands and a mouse on the desk). Feedback at 1 is a
+// looper; pull it down and the same device is a long delay.
+//
+// Extra methods beyond the standard contract: feed(on, oneLap), clear(), state().
+
+export function createLooper(ctx) {
+  const MAXLEN = 60; // s — a hard ceiling; each tape allocates only what it needs
+  const { input, output } = edges(ctx);
+  const feed = gainOf(ctx, 0);   // input → tape gate
+  const tapeIn = gainOf(ctx, 1);
+  const damp = ctx.createBiquadFilter();
+  damp.type = 'lowpass';
+  damp.frequency.value = 6000;
+  damp.Q.value = -3; // lowpass Q is in dB — anything above Butterworth peaks past unity and the tape grows
+  const fb = gainOf(ctx, 1);
+  const clip = ctx.createWaveShaper();
+  const cc = new Float32Array(257);
+  // slope exactly 1 at zero: a steeper knee turns the tape into an oscillator
+  for (let i = 0; i < 257; i++) cc[i] = Math.tanh((i / 128) - 1);
+  clip.curve = cc;
+  const loopOut = gainOf(ctx, 0.9);
+
+  let len = 4.8; // mirrors the rig's default (2 bars at 100 bpm) so the first build doesn't churn a swap
+  let level = 0.9;
+  let fbTarget = 1;
+  let delay = null;
+  let t0 = ctx.currentTime; // tape origin — the UI reads the head position from it
+  let feedUntil = 0;        // audio time the one-lap gate closes
+  let latched = false;
+  let content = false;
+  let swapTimer = 0;
+  let swapPending = false;
+
+  function mount() {
+    // Size the buffer to this tape rather than to the ceiling: a 2 s loop has
+    // no business reserving a minute of stereo audio, and every clear()
+    // allocates a fresh one.
+    const d = ctx.createDelay(Math.min(MAXLEN, len + 0.25));
+    d.delayTime.value = len;
+    tapeIn.connect(d);
+    d.connect(damp);
+    delay = d;
+    t0 = ctx.currentTime;
+  }
+
+  // tape: tapeIn → delay → damp → clip → [fb → tapeIn] and [loopOut → output]
+  damp.connect(clip);
+  clip.connect(fb);
+  fb.connect(tapeIn);
+  clip.connect(loopOut);
+  loopOut.connect(output);
+  input.connect(feed);
+  feed.connect(tapeIn);
+  input.connect(output); // you always hear yourself live, at unity
+  mount();
+
+  // Wiping a delay line means replacing it — the audio lives inside the node.
+  // Duck first so the cut is silent, and drop the INPUT edge too: disconnect()
+  // only sheds output edges, so tapeIn would otherwise pin the old tape alive.
+  // The swap is deferred so the duck can land first, which leaves a 45 ms
+  // window where the tape about to be thrown away is still wired up. Anything
+  // that touches the gate or the length has to settle that debt first, or it
+  // records into a tape that is already condemned.
+  function doSwap() {
+    if (swapTimer) { clearTimeout(swapTimer); swapTimer = 0; }
+    if (!swapPending) return;
+    swapPending = false;
+    const old = delay;
+    try { tapeIn.disconnect(old); } catch {}
+    unplug([old]);
+    mount();
+    const tt = ctx.currentTime;
+    loopOut.gain.cancelScheduledValues(tt);
+    loopOut.gain.setValueAtTime(0, tt);
+    loopOut.gain.linearRampToValueAtTime(level, tt + 0.03);
+    // Cancel and pin rather than setTargetAtTime: a wipe and a feed in the
+    // same tick leave clear()'s duck ramp pending, and a setTarget sandwiched
+    // inside a pending ramp strands the feedback near zero — the loop then
+    // plays its lap exactly once and dies. The tape is empty here, so
+    // starting from 0 is silent either way.
+    fb.gain.cancelScheduledValues(tt);
+    fb.gain.setValueAtTime(0, tt);
+    fb.gain.linearRampToValueAtTime(fbTarget, tt + 0.02);
+  }
+
+  function clear() {
+    doSwap(); // settle a previous wipe before starting another
+    const t = ctx.currentTime;
+    const cur = loopOut.gain.value;
+    loopOut.gain.cancelScheduledValues(t);
+    loopOut.gain.setValueAtTime(cur, t);
+    loopOut.gain.linearRampToValueAtTime(0, t + 0.025);
+    // Open the feedback path across the swap: at unity repeats, audio already
+    // past the delay (and the filter's own state) would otherwise circulate
+    // into the fresh tape and survive the wipe.
+    const curFb = fb.gain.value;
+    fb.gain.cancelScheduledValues(t);
+    fb.gain.setValueAtTime(curFb, t);
+    fb.gain.linearRampToValueAtTime(0, t + 0.01);
+    feedSet(false);
+    content = false;
+    swapPending = true;
+    swapTimer = setTimeout(doSwap, 45);
+  }
+
+  // oneLap releases the gate exactly one lap later on the AUDIO clock, so the
+  // captured phrase is sample-exact however late the UI timer wakes up.
+  function feedSet(on, oneLap) {
+    doSwap(); // never open the gate into a tape that is about to be discarded
+    const t = ctx.currentTime;
+    const cur = feed.gain.value;
+    feed.gain.cancelScheduledValues(t);
+    feed.gain.setValueAtTime(cur, t);
+    if (!on) {
+      feed.gain.linearRampToValueAtTime(0, t + 0.012);
+      feedUntil = 0;
+      latched = false;
+      return;
+    }
+    content = true;
+    feed.gain.linearRampToValueAtTime(1, t + 0.012);
+    if (oneLap) {
+      feedUntil = t + len;
+      latched = false;
+      feed.gain.setValueAtTime(1, feedUntil - 0.012);
+      feed.gain.linearRampToValueAtTime(0, feedUntil);
+    } else {
+      feedUntil = 0;
+      latched = true;
+    }
+  }
+
+  return {
+    input,
+    output,
+    feed: feedSet,
+    clear,
+    // The head position is wall-clock-free: the tape has rotated for
+    // (now - t0) seconds, so the phase is that modulo one lap.
+    state() {
+      const now = ctx.currentTime;
+      return {
+        len,
+        phase: len > 0 ? ((now - t0) % len) / len : 0,
+        feeding: latched || now < feedUntil,
+        feedLeft: Math.max(0, feedUntil - now),
+        latched,
+        content,
+      };
+    },
+    // Changing the tape's circumference would garble whatever is on it, so a
+    // length change is a clear — honest, and keeps the bar lock exact.
+    set(p) {
+      const t = ctx.currentTime;
+      if (p.feedback != null) {
+        fbTarget = num(p.feedback, 0, 1, fbTarget);
+        fb.gain.setTargetAtTime(fbTarget, t, HOT);
+      }
+      if (p.tone != null) damp.frequency.setTargetAtTime(num(p.tone, 200, 18000, damp.frequency.value), t, HOT);
+      if (p.level != null) {
+        level = num(p.level, 0, 1.2, level);
+        loopOut.gain.setTargetAtTime(level, t, HOT);
+      }
+      // length last: it wipes the tape, and clear() ducks feedback across the
+      // swap — a feedback write after it would undo that
+      if (p.length != null) {
+        const next = num(p.length, 0.1, MAXLEN - 1, len);
+        if (Math.abs(next - len) > 0.001) {
+          len = next;
+          clear();
+        }
+      }
+    },
+    dispose() {
+      if (swapTimer) { clearTimeout(swapTimer); swapTimer = 0; }
+      try { tapeIn.disconnect(delay); } catch {}
+      unplug([input, feed, tapeIn, delay, damp, clip, fb, loopOut, output]);
+    },
+  };
+}
+
 // ---- registry --------------------------------------------------------------------
 
 // The rig's canonical chain order.
-export const FX_ORDER = ['gate', 'sustainer', 'drive', 'cab', 'autowah', 'ringmod', 'pitch', 'mod', 'delay', 'reverb'];
+export const FX_ORDER = ['gate', 'sustainer', 'drive', 'cab', 'autowah', 'ringmod', 'pitch', 'mod', 'delay', 'reverb', 'looper'];
 
 export const FACTORIES = {
   gate: createGate,
@@ -1180,4 +1366,5 @@ export const FACTORIES = {
   mod: createMod,
   delay: createDelay,
   reverb: createReverb,
+  looper: createLooper,
 };
